@@ -8,6 +8,7 @@ real-time collaboration (RTC) functionalities to AI agents.
 import asyncio
 import contextlib
 import logging
+import sys
 from typing import AsyncIterator
 
 import anyio
@@ -89,6 +90,13 @@ class MCPHandler(RequestHandler):
     async def _handle_request(self):
         """Handle the MCP request using the session manager."""
         try:
+            # Print debug info to stderr
+            print(f"DEBUG: Received MCP request: {self.request.method} {self.request.path}", file=sys.stderr)
+            print(f"DEBUG: Request headers:", file=sys.stderr)
+            for name, value in self.request.headers.get_all():
+                print(f"DEBUG:   {name}: {value}", file=sys.stderr)
+            print(f"DEBUG: Request body: {self.request.body}", file=sys.stderr)
+            
             # Create a scope for the ASGI application
             scope = {
                 "type": "http",
@@ -112,6 +120,7 @@ class MCPHandler(RequestHandler):
 
             # Send the response back to Tornado
             async def send(message):
+                print(f"DEBUG: Sending response: {message}", file=sys.stderr)
                 if message["type"] == "http.response.start":
                     self.set_status(message["status"])
                     for name, value in message.get("headers", []):
@@ -127,7 +136,7 @@ class MCPHandler(RequestHandler):
 
             # Initialize the session manager for this request if needed
             if not self.mcp_server._session_manager_started:
-                logger.info("Starting session manager for the first request")
+                print("DEBUG: Starting session manager for the first request", file=sys.stderr)
                 # Start the session manager context and keep it running
                 self.mcp_server._session_manager_context = self.mcp_server.session_manager.run()
                 await self.mcp_server._session_manager_context.__aenter__()
