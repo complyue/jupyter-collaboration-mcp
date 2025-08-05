@@ -11,14 +11,12 @@ import pytest
 from jupyter_collaboration_mcp.auth import (
     AuthConfig,
     AuthManager,
-    AuthorizedMCPHandler,
     ResourceAuthorizer,
     authenticate_mcp_request,
     configure_auth,
-    create_auth_token,
+    configure_auth_with_token,
     get_auth_manager,
     get_authorizer,
-    get_secret_key,
 )
 
 
@@ -43,11 +41,10 @@ def resource_authorizer(auth_manager):
 def test_auth_config_initialization(auth_config):
     """Test that the authentication configuration initializes correctly."""
     assert auth_config.token_expiry == timedelta(hours=1)
-    assert auth_config.secret_key == "default-secret-key"
-    assert auth_config.algorithm == "HS256"
     assert auth_config.allowed_origins == ["*"]
     assert auth_config.rate_limit_requests == 100
     assert auth_config.rate_limit_window == 60
+    assert auth_config.valid_token is None
 
 
 def test_auth_manager_initialization(auth_manager):
@@ -56,59 +53,18 @@ def test_auth_manager_initialization(auth_manager):
     assert auth_manager._rate_limits == {}
 
 
-def test_create_token(auth_manager):
-    """Test creating a JWT token."""
-    user_id = "test-user"
-    additional_claims = {"admin": True}
-
-    token = auth_manager.create_token(user_id, additional_claims)
-
-    assert isinstance(token, str)
-    assert len(token) > 0
+def test_set_and_verify_token(auth_manager):
+    """Test setting and verifying a token."""
+    token = "test-token"
+    auth_manager.set_valid_token(token)
+    
+    assert auth_manager.verify_token(token) is True
+    assert auth_manager.verify_token("wrong-token") is False
 
 
-def test_verify_token(auth_manager):
-    """Test verifying a JWT token."""
-    user_id = "test-user"
-    additional_claims = {"admin": True}
-
-    # Create a token
-    token = auth_manager.create_token(user_id, additional_claims)
-
-    # Verify the token
-    claims = auth_manager.verify_token(token)
-
-    assert claims["sub"] == user_id
-    assert claims["admin"] is True
-    assert claims["type"] == "mcp-access"
-
-
-def test_verify_invalid_token(auth_manager):
-    """Test verifying an invalid JWT token."""
-    with pytest.raises(Exception):  # Should raise jwt.PyJWTError
-        auth_manager.verify_token("invalid-token")
-
-
-def test_verify_expired_token(auth_manager):
-    """Test verifying an expired JWT token."""
-    # Create a token that's already expired
-    user_id = "test-user"
-    claims = {
-        "sub": user_id,
-        "iat": datetime.utcnow() - timedelta(hours=2),
-        "exp": datetime.utcnow() - timedelta(hours=1),
-        "type": "mcp-access",
-    }
-
-    import jwt
-
-    token = jwt.encode(
-        claims, auth_manager.config.secret_key, algorithm=auth_manager.config.algorithm
-    )
-
-    # Verify the token
-    with pytest.raises(Exception):  # Should raise jwt.PyJWTError
-        auth_manager.verify_token(token)
+def test_verify_token_no_config(auth_manager):
+    """Test token verification when no token is configured."""
+    assert auth_manager.verify_token("any-token") is False
 
 
 def test_check_rate_limit_within_limit(auth_manager):
@@ -286,17 +242,36 @@ def test_configure_auth():
 
     # Create a custom config
     config = AuthConfig()
-    config.secret_key = "custom-secret-key"
+    config.rate_limit_requests = 200
 
     # Configure auth
     configure_auth(config)
 
     # Check that the instances were updated
     auth_manager = get_auth_manager()
-    assert auth_manager.config.secret_key == "custom-secret-key"
+    assert auth_manager.config.rate_limit_requests == 200
 
     authorizer = get_authorizer()
-    assert authorizer.auth_manager.config.secret_key == "custom-secret-key"
+    assert authorizer.auth_manager.config.rate_limit_requests == 200
+
+
+def test_configure_auth_with_token():
+    """Test configuring authentication with a token."""
+    # Reset the global instances
+    import jupyter_collaboration_mcp.auth
+
+    jupyter_collaboration_mcp.auth._auth_manager = None
+    jupyter_collaboration_mcp.auth._authorizer = None
+
+    # Configure auth with a token
+    configure_auth_with_token("test-token")
+
+    # Check that the instances were updated
+    auth_manager = get_auth_manager()
+    assert auth_manager.config.valid_token == "test-token"
+
+    authorizer = get_authorizer()
+    assert authorizer.auth_manager.config.valid_token == "test-token"
 
 
 @pytest.mark.asyncio
@@ -307,14 +282,13 @@ async def test_authenticate_mcp_request():
 
     jupyter_collaboration_mcp.auth._auth_manager = None
 
-    # Create a valid token
-    auth_manager = get_auth_manager()
-    token = auth_manager.create_token("test-user")
+    # Configure with a token
+    configure_auth_with_token("test-token")
 
     # Create a mock scope
     scope = {
         "headers": [
-            (b"authorization", f"Bearer {token}".encode()),
+            (b"authorization", b"Identity.token test-token"),
             (b"x-forwarded-for", b"test-client"),
         ]
     }
@@ -322,12 +296,21 @@ async def test_authenticate_mcp_request():
     # Authenticate the request
     user_claims = await authenticate_mcp_request(scope)
 
-    assert user_claims["sub"] == "test-user"
+    assert user_claims["sub"] == "user"
+    assert user_claims["admin"] is True
 
 
 @pytest.mark.asyncio
 async def test_authenticate_mcp_request_missing_header():
     """Test authenticating an MCP request with missing auth header."""
+    # Reset the global auth manager
+    import jupyter_collaboration_mcp.auth
+
+    jupyter_collaboration_mcp.auth._auth_manager = None
+
+    # Configure with a token
+    configure_auth_with_token("test-token")
+
     # Create a mock scope without auth header
     scope = {"headers": []}
 
@@ -339,8 +322,40 @@ async def test_authenticate_mcp_request_missing_header():
 @pytest.mark.asyncio
 async def test_authenticate_mcp_request_invalid_header():
     """Test authenticating an MCP request with invalid auth header."""
+    # Reset the global auth manager
+    import jupyter_collaboration_mcp.auth
+
+    jupyter_collaboration_mcp.auth._auth_manager = None
+
+    # Configure with a token
+    configure_auth_with_token("test-token")
+
     # Create a mock scope with invalid auth header
-    scope = {"headers": [(b"authorization", b"InvalidHeader test-token")]}
+    scope = {"headers": [(b"authorization", b"Bearer test-token")]}
+
+    # Authenticate the request
+    with pytest.raises(Exception):  # Should raise HTTPError
+        await authenticate_mcp_request(scope)
+
+
+@pytest.mark.asyncio
+async def test_authenticate_mcp_request_invalid_token():
+    """Test authenticating an MCP request with invalid token."""
+    # Reset the global auth manager
+    import jupyter_collaboration_mcp.auth
+
+    jupyter_collaboration_mcp.auth._auth_manager = None
+
+    # Configure with a token
+    configure_auth_with_token("test-token")
+
+    # Create a mock scope with invalid token
+    scope = {
+        "headers": [
+            (b"authorization", b"Identity.token invalid-token"),
+            (b"x-forwarded-for", b"test-client"),
+        ]
+    }
 
     # Authenticate the request
     with pytest.raises(Exception):  # Should raise HTTPError
@@ -355,20 +370,19 @@ async def test_authenticate_mcp_request_rate_limited():
 
     jupyter_collaboration_mcp.auth._auth_manager = None
 
-    # Create a valid token
-    auth_manager = get_auth_manager()
-    token = auth_manager.create_token("test-user")
+    # Configure with a token
+    configure_auth_with_token("test-token")
 
     # Create a mock scope
     scope = {
         "headers": [
-            (b"authorization", f"Bearer {token}".encode()),
+            (b"authorization", b"Identity.token test-token"),
             (b"x-forwarded-for", b"test-client"),
         ]
     }
 
     # Use up the rate limit
-    for _ in range(auth_manager.config.rate_limit_requests):
+    for _ in range(100):  # Default rate limit is 100
         await authenticate_mcp_request(scope)
 
     # The next request should be rate limited
@@ -376,112 +390,29 @@ async def test_authenticate_mcp_request_rate_limited():
         await authenticate_mcp_request(scope)
 
 
-def test_authorized_mcp_handler_prepare():
-    """Test the AuthorizedMCPHandler prepare method."""
-    # Create a mock request
-    request = MagicMock()
-    request.headers = {"Authorization": "Bearer test-token"}
-
-    # Create a mock application
-    application = MagicMock()
-
-    # Create the handler
-    handler = AuthorizedMCPHandler(application, request)
-
-    # Mock the parent prepare method
-    with patch.object(AuthorizedMCPHandler, "prepare"):
-        # Mock the auth manager
-        with patch("jupyter_collaboration_mcp.auth.get_auth_manager") as mock_get_auth:
-            mock_auth_manager = MagicMock()
-            mock_auth_manager.verify_token.return_value = {"sub": "test-user"}
-            mock_get_auth.return_value = mock_auth_manager
-
-            # Call prepare
-            handler.prepare()
-
-            # Check that the token was verified
-            mock_auth_manager.verify_token.assert_called_once_with("test-token")
-
-            # Check that the current user was set
-            assert handler.current_user == {"sub": "test-user"}
-
-
 @pytest.mark.asyncio
-async def test_authorized_mcp_handler_check_document_access():
-    """Test the AuthorizedMCPHandler check_document_access method."""
-    # Create a mock request
-    request = MagicMock()
-    request.headers = {"Authorization": "Bearer test-token"}
-
-    # Create a mock application
-    application = MagicMock()
-
-    # Create the handler
-    handler = AuthorizedMCPHandler(application, request)
-    handler.current_user = {"sub": "test-user"}
-
-    # Mock the authorizer
-    with patch("jupyter_collaboration_mcp.auth.get_authorizer") as mock_get_authorizer:
-        mock_authorizer = MagicMock()
-        mock_authorizer.check_document_access = AsyncMock(return_value=True)
-        mock_get_authorizer.return_value = mock_authorizer
-
-        # Call check_document_access
-        await handler.check_document_access("/test.md", "read")
-
-        # Check that the authorizer was called correctly
-        mock_authorizer.check_document_access.assert_called_once_with(
-            {"sub": "test-user"}, "/test.md", "read"
-        )
-
-
-@pytest.mark.asyncio
-async def test_authorized_mcp_handler_check_document_access_denied():
-    """Test the AuthorizedMCPHandler check_document_access method when access is denied."""
-    # Create a mock request
-    request = MagicMock()
-    request.headers = {"Authorization": "Bearer test-token"}
-
-    # Create a mock application
-    application = MagicMock()
-
-    # Create the handler
-    handler = AuthorizedMCPHandler(application, request)
-    handler.current_user = {"sub": "test-user"}
-
-    # Mock the authorizer
-    with patch("jupyter_collaboration_mcp.auth.get_authorizer") as mock_get_authorizer:
-        mock_authorizer = MagicMock()
-        mock_authorizer.check_document_access = AsyncMock(return_value=False)
-        mock_get_authorizer.return_value = mock_authorizer
-
-        # Call check_document_access and expect an exception
-        with pytest.raises(Exception):  # Should raise HTTPError
-            await handler.check_document_access("/test.md", "write")
-
-
-def test_get_secret_key():
-    """Test getting the secret key."""
-    secret_key = get_secret_key()
-
-    assert secret_key == "default-secret-key"
-
-
-def test_create_auth_token():
-    """Test creating an authentication token."""
+async def test_authenticate_mcp_request_cors_denied():
+    """Test authenticating an MCP request with disallowed CORS origin."""
     # Reset the global auth manager
     import jupyter_collaboration_mcp.auth
 
     jupyter_collaboration_mcp.auth._auth_manager = None
 
-    token = create_auth_token("test-user", admin=True)
+    # Configure with a token and restricted origins
+    configure_auth_with_token("test-token")
+    config = AuthConfig()
+    config.allowed_origins = ["https://example.com"]
+    configure_auth(config)
 
-    assert isinstance(token, str)
-    assert len(token) > 0
+    # Create a mock scope with disallowed origin
+    scope = {
+        "headers": [
+            (b"authorization", b"Identity.token test-token"),
+            (b"x-forwarded-for", b"test-client"),
+            (b"origin", b"https://malicious.com"),
+        ]
+    }
 
-    # Verify the token
-    auth_manager = get_auth_manager()
-    claims = auth_manager.verify_token(token)
-
-    assert claims["sub"] == "test-user"
-    assert claims["admin"] is True
+    # Authenticate the request
+    with pytest.raises(Exception):  # Should raise HTTPError
+        await authenticate_mcp_request(scope)

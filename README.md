@@ -62,7 +62,7 @@ jupyter-collaboration-mcp --host 0.0.0.0 --port 8000
 
 ## Authentication
 
-The MCP server uses JWT tokens for authentication. When running as a Jupyter server extension, it automatically uses Jupyter's authentication system.
+The MCP server uses simple token-based authentication. When running as a Jupyter server extension, it automatically uses the token provided via the `--IdentityProvider.token` command line option.
 
 ### Using Jupyter Lab Tokens
 
@@ -86,7 +86,7 @@ For MCP clients, you'll need to configure the server URL and authentication toke
     "jupyter-collaboration": {
       "url": "http://localhost:8888/mcp",
       "headers": {
-        "Authorization": "Bearer your-secret-token"
+        "Authorization": "Identity.token your-secret-token"
       },
       "disabled": false
     }
@@ -97,7 +97,7 @@ For MCP clients, you'll need to configure the server URL and authentication toke
 #### Configuration Parameters
 
 - `url`: The URL of the MCP server endpoint
-- `headers`: HTTP headers to include in requests, typically including the Authorization header with the JWT token
+- `headers`: HTTP headers to include in requests, typically including the Authorization header with the token
 - `disabled`: Set to `true` to disable this server configuration
 - `alwaysAllow`: Optional list of tools that should always be allowed (if supported by your client)
 
@@ -247,11 +247,13 @@ The server exposes the following MCP tools:
 
 ### Authentication
 
-All MCP requests must include a JWT token in the Authorization header:
+All MCP requests must include a token in the Authorization header:
 
 ```
-Authorization: Bearer your-secret-token
+Authorization: Identity.token your-secret-token
 ```
+
+The token must match the one provided when starting Jupyter Lab with `--IdentityProvider.token=your-secret-token`.
 
 ## Example Usage
 
@@ -264,9 +266,7 @@ Here's a complete example of how to configure an MCP client to connect to the Ju
   "mcpServers": {
     "jupyter-collaboration": {
       "url": "http://localhost:8888/mcp",
-      "headers": {
-        "Authorization": "Bearer your-secret-token"
-      },
+      "headers": { "Authorization": "Identity.token your-secret-token" },
       "disabled": false
     }
   }
@@ -293,7 +293,7 @@ To enable debug logging, you can:
 
 1. Set the log level to DEBUG when starting the server:
    ```bash
-   jupyter lab --IdentityProvider.token=your-token --log-level=DEBUG
+   jupyter lab --log-level=DEBUG
    ```
 
 2. Or add this to your `jupyter_server_config.py`:

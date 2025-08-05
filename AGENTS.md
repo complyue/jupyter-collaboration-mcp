@@ -57,7 +57,7 @@ jupyter-collaboration-mcp/
 ### 4. Authentication & Authorization
 - Located in [`auth.py`](jupyter_collaboration_mcp/auth.py)
 - Integrated with Jupyter's existing security infrastructure
-- Uses JWT tokens for authentication
+- Uses simple token-based authentication
 
 ## MCP Endpoints
 
@@ -149,13 +149,13 @@ python -m jupyter_collaboration_mcp --host 127.0.0.1 --port 8000 --log-level DEB
 
 ## Authentication
 
-All MCP requests must include a JWT token in the Authorization header:
+All MCP requests must include a token in the Authorization header:
 
 ```
-Authorization: Bearer your-secret-token
+Authorization: Identity.token your-secret-token
 ```
 
-The server integrates with Jupyter's authentication system, using the same tokens and security infrastructure.
+The token must match the one provided when starting Jupyter Lab with `--IdentityProvider.token=your-secret-token`. The server integrates with Jupyter's authentication system, using the same token for MCP requests.
 
 ## Code Quality and Testing
 
@@ -218,6 +218,7 @@ When contributing to this project:
    ```
 
 2. Check authentication if receiving 401 errors
+3. Check rate limiting if receiving 429 errors
 3. Verify the RTC adapter is properly initialized
 4. Check the event store for resumability issues
 5. Use the test suite to isolate issues
@@ -234,13 +235,15 @@ To connect an AI agent to this MCP server:
     "jupyter-collaboration": {
       "url": "http://localhost:8888/mcp",
       "headers": {
-        "Authorization": "Bearer your-secret-token"
+        "Authorization": "Identity.token your-secret-token"
       },
       "disabled": false
     }
   }
 }
 ```
+
+Replace `your-secret-token` with the actual token you used when starting Jupyter Lab.
 
 ### Example Use Cases
 
@@ -252,10 +255,11 @@ To connect an AI agent to this MCP server:
 ## Important Considerations
 
 1. **Security**: Always follow Jupyter's security model and ensure proper authentication
-2. **Real-time Nature**: Remember that operations affect live collaboration sessions
-3. **CRDT Operations**: Understand how YDoc operations work when modifying the RTC adapter
-4. **Resumability**: Ensure the event store properly handles disconnections and reconnections
-5. **Performance**: Consider the impact of operations on real-time collaboration
+2. **Token Management**: Ensure the token is kept secure and only shared with authorized clients
+3. **Real-time Nature**: Remember that operations affect live collaboration sessions
+4. **CRDT Operations**: Understand how YDoc operations work when modifying the RTC adapter
+5. **Resumability**: Ensure the event store properly handles disconnections and reconnections
+6. **Performance**: Consider the impact of operations on real-time collaboration
 
 ## Additional Resources
 

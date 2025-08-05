@@ -19,7 +19,7 @@ from starlette.routing import Mount
 from tornado import httputil
 from tornado.web import RequestHandler
 
-from .auth import authenticate_mcp_request
+from .auth import authenticate_mcp_request, configure_auth_with_token
 from .event_store import InMemoryEventStore
 from .handlers import AwarenessHandlers, DocumentHandlers, NotebookHandlers
 from .rtc_adapter import RTCAdapter
@@ -39,11 +39,19 @@ class MCPHandler(RequestHandler):
         """Prepare the request handler."""
         # Authenticate the request
         try:
-            user = await authenticate_mcp_request(self.request)
+            # Convert Tornado request to ASGI scope-like structure for authentication
+            scope = {
+                "headers": [
+                    (k.lower().encode(), v.encode()) for k, v in self.request.headers.get_all()
+                ],
+                "method": self.request.method,
+                "path": self.request.path,
+            }
+            user = await authenticate_mcp_request(scope)
             # Add user to context for handlers
             self.request.user = user
         except Exception as e:
-            logger.error(f"Error authenticating MCP request: {e}")
+            logger.error(f"Error authenticating MCP request: {e}", exc_info=True)
             self.set_status(401)
             self.finish("Unauthorized")
             return
@@ -118,7 +126,7 @@ class MCPHandler(RequestHandler):
             # Process the request through the session manager
             await self.mcp_server.session_manager.handle_request(scope, receive, send)
         except Exception as e:
-            logger.error(f"Error handling MCP request: {e}")
+            logger.error(f"Error handling MCP request: {e}", exc_info=True)
             self.set_status(500)
             self.finish("Internal server error")
 
@@ -133,6 +141,15 @@ class MCPServerExtension(ExtensionApp):
     def initialize(self):
         """Initialize the extension."""
         super().initialize()
+        
+        # Configure authentication with token from Jupyter's command line
+        token = getattr(self.serverapp.identity_provider, "token", None)
+        if token:
+            configure_auth_with_token(token)
+            self.log.info(f"Configured authentication with token from command line")
+        else:
+            self.log.warning("No token found in Jupyter configuration, using default authentication")
+            
         self.mcp_server = MCPServer()
         self.log.info("Jupyter Collaboration MCP Server extension initialized")
 
@@ -146,7 +163,7 @@ class MCPServerExtension(ExtensionApp):
 
         # Add the MCP server to the Jupyter server app using a Tornado handler
         self.serverapp.web_app.add_handlers(
-            ".*", [(r"/mcp/.*", MCPHandler, {"mcp_server": self.mcp_server})]
+            ".*", [(r"/mcp.*", MCPHandler, {"mcp_server": self.mcp_server})]
         )
 
         # RTC adapter initialization will be deferred until first use
@@ -167,10 +184,10 @@ class MCPServer:
 
     def _setup_handlers(self):
         """Register all MCP tools."""
-        # Initialize handlers
-        notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
-        document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
-        awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
+        # Initialize handlers and store them as instance variables
+        self.notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
+        self.document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
+        self.awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
 
     def create_app(self):
         """Create the Starlette application with MCP endpoints."""
@@ -190,7 +207,7 @@ class MCPServer:
                 # Process the request
                 await self.session_manager.handle_request(scope, receive, send)
             except Exception as e:
-                logger.error(f"Error handling MCP request: {e}")
+                logger.error(f"Error handling MCP request: {e}", exc_info=True)
                 # Send error response
                 await send(
                     {

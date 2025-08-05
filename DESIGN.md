@@ -743,10 +743,11 @@ jupyter-collaboration-mcp/
 
 ### Authentication Strategy
 
-#### 1. Token-Based Authentication
-- **JWT Tokens**: Use JSON Web Tokens for authenticating MCP requests
-- **Token Source**: Tokens can be obtained from Jupyter's existing authentication system
-- **Token Validation**: Validate tokens against Jupyter's user database and session management
+#### 1. Simple Token Authentication
+- **Token-Based**: MCP requests require a simple token for authentication
+- **Token Source**: Token is provided via `--IdentityProvider.token=xxx` command line option
+- **Token Validation**: Server validates that the token matches the one provided at startup
+- **Rate Limiting**: Implement rate limiting to prevent abuse
 
 #### 2. Integration with Jupyter Auth
 - **Leverage Existing Auth**: Use Jupyter's authentication mechanisms rather than creating a new system
@@ -769,9 +770,11 @@ jupyter-collaboration-mcp/
 ### Security Considerations
 
 #### 1. Token Security
-- **Token Expiration**: Set appropriate expiration times for tokens
-- **Token Revocation**: Support for token revocation if needed
-- **Secure Transmission**: Ensure tokens are always transmitted over HTTPS
+- **Token Transmission**: Tokens are transmitted in the Authorization header
+- **Token Validation**: Simple string comparison to validate tokens
+- **Rate Limiting**: Implement appropriate rate limiting for requests
+- **CORS Configuration**: Restrict access to approved origins
+- **Secure Transmission**: Ensure all communication is over HTTPS
 
 #### 2. CORS Configuration
 - **Restricted Origins**: Only allow requests from approved origins
@@ -821,7 +824,6 @@ dependencies = [
     "uvicorn>=0.23.0",
     "pydantic>=2.0.0",
     "anyio>=4.0.0",
-    "pyjwt>=2.8.0",
 ]
 ```
 
@@ -981,34 +983,36 @@ class NotebookHandlers:
 #### 4.1 Implement Authentication
 ```python
 # jupyter_collaboration_mcp/auth.py
-import jwt
 from typing import Optional
 
 from jupyter_server.auth import AuthorizedAsyncHandler
 from tornado.web import HTTPError
 
 async def authenticate_mcp_request(scope) -> Optional[Dict[str, Any]]:
-    """Authenticate an MCP request using Jupyter's authentication system."""
+    """Authenticate an MCP request using a simple token."""
     # Extract token from headers
     headers = dict(scope.get("headers", []))
     auth_header = headers.get(b"authorization", b"").decode()
     
-    if not auth_header or not auth_header.startswith("Bearer "):
+    if not auth_header or not auth_header.startswith("Identity.token "):
         raise HTTPError(401, "Missing or invalid authentication header")
     
-    token = auth_header[7:]  # Remove "Bearer " prefix
+    token = auth_header[15:]  # Remove "Identity.token " prefix
     
-    try:
-        # Validate JWT token
-        # This would integrate with Jupyter's token validation
-        payload = jwt.decode(
-            token,
-            key=get_secret_key(),  # Get from Jupyter config
-            algorithms=["HS256"]
-        )
-        return payload
-    except jwt.PyJWTError as e:
-        raise HTTPError(401, f"Invalid token: {str(e)}")
+    # Check rate limit
+    client_id = headers.get(b"x-forwarded-for", b"").decode() or "unknown"
+    if not check_rate_limit(client_id):
+        raise HTTPError(429, "Rate limit exceeded")
+    
+    # Verify token
+    if not verify_token(token):
+        raise HTTPError(401, "Invalid token")
+    
+    # Return basic user claims
+    return {
+        "sub": "user",
+        "admin": True
+    }
 ```
 
 #### 4.2 Implement Event Store

@@ -1,15 +1,14 @@
 """
 Authentication and authorization for Jupyter Collaboration MCP Server.
 
-This module implements token-based authentication and resource-based authorization
+This module implements simple token-based authentication and resource-based authorization
 integrated with Jupyter's existing security infrastructure.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import jwt
 from tornado.web import HTTPError
 
 logger = logging.getLogger(__name__)
@@ -20,12 +19,10 @@ class AuthConfig:
 
     def __init__(self):
         """Initialize authentication configuration."""
-        self.token_expiry = timedelta(hours=1)
-        self.secret_key = "default-secret-key"  # Should be overridden in config
-        self.algorithm = "HS256"
         self.allowed_origins = ["*"]  # Should be restricted in production
         self.rate_limit_requests = 100  # requests per minute
         self.rate_limit_window = 60  # seconds
+        self.valid_token = None  # Simple token for authentication
 
 
 class AuthManager:
@@ -39,53 +36,6 @@ class AuthManager:
         """
         self.config = config
         self._rate_limits: Dict[str, List[float]] = {}
-
-    def create_token(self, user_id: str, additional_claims: Optional[Dict[str, Any]] = None) -> str:
-        """Create a JWT token for a user.
-
-        Args:
-            user_id: ID of the user
-            additional_claims: Additional claims to include in the token
-
-        Returns:
-            JWT token string
-        """
-        now = datetime.utcnow()
-        expiry = now + self.config.token_expiry
-
-        claims = {"sub": user_id, "iat": now, "exp": expiry, "type": "mcp-access"}
-
-        if additional_claims:
-            claims.update(additional_claims)
-
-        token = jwt.encode(claims, self.config.secret_key, algorithm=self.config.algorithm)
-
-        return token
-
-    def verify_token(self, token: str) -> Dict[str, Any]:
-        """Verify and decode a JWT token.
-
-        Args:
-            token: JWT token string
-
-        Returns:
-            Decoded token claims
-
-        Raises:
-            jwt.PyJWTError: If the token is invalid
-        """
-        try:
-            claims = jwt.decode(token, self.config.secret_key, algorithms=[self.config.algorithm])
-
-            # Check token type
-            if claims.get("type") != "mcp-access":
-                raise jwt.PyJWTError("Invalid token type")
-
-            return claims
-        except jwt.ExpiredSignatureError:
-            raise jwt.PyJWTError("Token has expired")
-        except jwt.InvalidTokenError as e:
-            raise jwt.PyJWTError(f"Invalid token: {str(e)}")
 
     def check_rate_limit(self, client_id: str) -> bool:
         """Check if a client has exceeded the rate limit.
@@ -130,6 +80,28 @@ class AuthManager:
 
         return origin in self.config.allowed_origins
 
+    def verify_token(self, token: str) -> bool:
+        """Verify a token.
+
+        Args:
+            token: Token string to verify
+
+        Returns:
+            True if the token is valid, False otherwise
+        """
+        if not self.config.valid_token:
+            return False  # No token configured
+
+        return token == self.config.valid_token
+
+    def set_valid_token(self, token: str):
+        """Set the valid token for authentication.
+
+        Args:
+            token: Token string to use for authentication
+        """
+        self.config.valid_token = token
+
 
 class ResourceAuthorizer:
     """Authorizer for resource-based access control."""
@@ -148,7 +120,7 @@ class ResourceAuthorizer:
         """Check if a user has access to a document.
 
         Args:
-            user_claims: User claims from the JWT token
+            user_claims: User claims from the authentication
             document_path: Path to the document
             permission: Permission level to check (read, write, execute, admin)
 
@@ -180,7 +152,7 @@ class ResourceAuthorizer:
         """Check if a user has access to a collaboration session.
 
         Args:
-            user_claims: User claims from the JWT token
+            user_claims: User claims from the authentication
             session_id: ID of the session
             permission: Permission level to check (join, leave, manage)
 
@@ -262,8 +234,19 @@ def configure_auth(config: AuthConfig):
     _authorizer = ResourceAuthorizer(_auth_manager)
 
 
+def configure_auth_with_token(token: str):
+    """Configure authentication with a simple token.
+
+    Args:
+        token: Token to use for authentication
+    """
+    config = AuthConfig()
+    config.valid_token = token
+    configure_auth(config)
+
+
 async def authenticate_mcp_request(scope) -> Dict[str, Any]:
-    """Authenticate an MCP request using Jupyter's authentication system.
+    """Authenticate an MCP request using a simple token.
 
     Args:
         scope: ASGI scope dictionary
@@ -280,10 +263,10 @@ async def authenticate_mcp_request(scope) -> Dict[str, Any]:
     headers = dict(scope.get("headers", []))
     auth_header = headers.get(b"authorization", b"").decode()
 
-    if not auth_header or not auth_header.startswith("Bearer "):
+    if not auth_header or not auth_header.startswith("Identity.token "):
         raise HTTPError(401, "Missing or invalid authentication header")
 
-    token = auth_header[7:]  # Remove "Bearer " prefix
+    token = auth_header[15:]  # Remove "Identity.token " prefix
 
     # Check rate limit
     client_id = headers.get(b"x-forwarded-for", b"").decode() or "unknown"
@@ -295,36 +278,13 @@ async def authenticate_mcp_request(scope) -> Dict[str, Any]:
     if origin and not auth_manager.check_cors_origin(origin):
         raise HTTPError(403, "Origin not allowed")
 
-    try:
-        # Validate JWT token
-        claims = auth_manager.verify_token(token)
-        return claims
-    except jwt.PyJWTError as e:
-        raise HTTPError(401, f"Invalid token: {str(e)}")
+    # Verify token
+    if not auth_manager.verify_token(token):
+        raise HTTPError(401, "Invalid token")
 
-
-def get_secret_key() -> str:
-    """Get the secret key for JWT token validation.
-
-    In a real implementation, this would get the key from Jupyter's configuration.
-    For now, we'll use a default key.
-
-    Returns:
-        Secret key string
-    """
-    # This should be overridden in production to get the key from Jupyter's config
-    return "default-secret-key"
-
-
-def create_auth_token(user_id: str, **kwargs) -> str:
-    """Create an authentication token for a user.
-
-    Args:
-        user_id: ID of the user
-        **kwargs: Additional claims to include in the token
-
-    Returns:
-        JWT token string
-    """
-    auth_manager = get_auth_manager()
-    return auth_manager.create_token(user_id, kwargs)
+    # Return basic user claims
+    return {
+        "sub": "user",
+        "iat": datetime.utcnow(),
+        "admin": True
+    }
