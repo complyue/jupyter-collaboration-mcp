@@ -123,9 +123,15 @@ class MCPHandler(RequestHandler):
                     self.write(message.get("body", b""))
                     self.finish()
 
+            # Create a new session manager for this request
+            session_manager = StreamableHTTPSessionManager(
+                app=self.mcp_server.server,
+                event_store=self.mcp_server.event_store,
+            )
+
             # Process the request through the session manager within a context manager
-            async with self.mcp_server.session_manager.run():
-                await self.mcp_server.session_manager.handle_request(scope, receive, send)
+            async with session_manager.run():
+                await session_manager.handle_request(scope, receive, send)
         except Exception as e:
             logger.error(f"Error handling MCP request: {e}", exc_info=True)
             self.set_status(500)
@@ -181,7 +187,6 @@ class MCPServer:
         self.server = Server("jupyter-collaboration-mcp")
         self.rtc_adapter = RTCAdapter()
         self.event_store = InMemoryEventStore()
-        self.session_manager = None
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -193,11 +198,6 @@ class MCPServer:
 
     def create_app(self):
         """Create the Starlette application with MCP endpoints."""
-        # Initialize the session manager
-        self.session_manager = StreamableHTTPSessionManager(
-            app=self.server,
-            event_store=self.event_store,
-        )
 
         async def handle_mcp_request(scope, receive, send):
             """Handle MCP requests with authentication."""
@@ -207,8 +207,15 @@ class MCPServer:
                 # Add user to context for handlers
                 scope["user"] = user
 
-                # Process the request
-                await self.session_manager.handle_request(scope, receive, send)
+                # Create a new session manager for this request
+                session_manager = StreamableHTTPSessionManager(
+                    app=self.server,
+                    event_store=self.event_store,
+                )
+
+                # Process the request with a new session manager
+                async with session_manager.run():
+                    await session_manager.handle_request(scope, receive, send)
             except Exception as e:
                 logger.error(f"Error handling MCP request: {e}", exc_info=True)
                 # Send error response
@@ -240,9 +247,9 @@ class MCPServer:
         # Store the event
         await self.event_store.store_event(stream_id="broadcast", message=event_message)
 
-        # Broadcast to all connected sessions
-        if self.session_manager:
-            await self.session_manager.broadcast_event(event_message)
+        # Note: With per-request session managers, we can't directly broadcast
+        # This functionality would need to be implemented differently if needed
+        logger.info(f"Broadcast event stored: {event_type}")
 
     async def get_server_info(self) -> dict:
         """Get server information."""
