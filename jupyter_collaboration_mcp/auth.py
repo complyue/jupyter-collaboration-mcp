@@ -10,7 +10,6 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
-from jupyter_server.auth import AuthorizedAsyncHandler
 from tornado.web import HTTPError
 
 logger = logging.getLogger(__name__)
@@ -314,59 +313,6 @@ async def authenticate_mcp_request(scope) -> Dict[str, Any]:
         return claims
     except jwt.PyJWTError as e:
         raise HTTPError(401, f"Invalid token: {str(e)}")
-
-
-class AuthorizedMCPHandler(AuthorizedAsyncHandler):
-    """Base handler for MCP endpoints with authorization."""
-    
-    def prepare(self):
-        """Prepare the handler with authentication and authorization."""
-        super().prepare()
-        
-        # Get user from the request
-        token = self.request.headers.get("Authorization", "")
-        if not token.startswith("Bearer "):
-            raise HTTPError(401, "Missing or invalid authentication header")
-        
-        token = token[7:]  # Remove "Bearer " prefix
-        
-        try:
-            auth_manager = get_auth_manager()
-            self.current_user = auth_manager.verify_token(token)
-        except jwt.PyJWTError as e:
-            raise HTTPError(401, f"Invalid token: {str(e)}")
-    
-    async def check_document_access(self, document_path: str, permission: str = "read"):
-        """Check if the current user has access to a document.
-        
-        Args:
-            document_path: Path to the document
-            permission: Permission level to check
-            
-        Raises:
-            HTTPError: If access is denied
-        """
-        authorizer = get_authorizer()
-        if not await authorizer.check_document_access(
-            self.current_user, document_path, permission
-        ):
-            raise HTTPError(403, f"Access denied for document: {document_path}")
-    
-    async def check_session_access(self, session_id: str, permission: str = "join"):
-        """Check if the current user has access to a session.
-        
-        Args:
-            session_id: ID of the session
-            permission: Permission level to check
-            
-        Raises:
-            HTTPError: If access is denied
-        """
-        authorizer = get_authorizer()
-        if not await authorizer.check_session_access(
-            self.current_user, session_id, permission
-        ):
-            raise HTTPError(403, f"Access denied for session: {session_id}")
 
 
 def get_secret_key() -> str:

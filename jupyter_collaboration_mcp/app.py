@@ -5,6 +5,7 @@ This module implements the core MCP server that exposes Jupyter Collaboration's
 real-time collaboration (RTC) functionalities to AI agents.
 """
 
+import asyncio
 import logging
 from typing import AsyncIterator
 
@@ -14,6 +15,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.routing import Mount
+from jupyter_server.extension.application import ExtensionApp
 
 from .event_store import InMemoryEventStore
 from .auth import authenticate_mcp_request
@@ -21,6 +23,38 @@ from .rtc_adapter import RTCAdapter
 from .handlers import NotebookHandlers, DocumentHandlers, AwarenessHandlers
 
 logger = logging.getLogger(__name__)
+
+
+class MCPServerExtension(ExtensionApp):
+    """Jupyter Server Extension for MCP Server."""
+    
+    name = "jupyter_collaboration_mcp"
+    app_name = "Jupyter Collaboration MCP"
+    description = "MCP server for Jupyter Collaboration features"
+    
+    def initialize(self):
+        """Initialize the extension."""
+        super().initialize()
+        self.mcp_server = MCPServer()
+        self.log.info("Jupyter Collaboration MCP Server extension initialized")
+    
+    def initialize_handlers(self):
+        """Initialize the handlers for the extension."""
+        # Ensure mcp_server is initialized
+        if not hasattr(self, 'mcp_server'):
+            self.mcp_server = MCPServer()
+        
+        app = self.mcp_server.create_app()
+        
+        # Add the MCP server to the Jupyter server app
+        self.handlers.extend([
+            (r"/mcp/.*", app)
+        ])
+        
+        # Initialize the RTC adapter
+        asyncio.create_task(self.mcp_server.rtc_adapter.initialize(self.serverapp))
+        
+        self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
 
 
 class MCPServer:

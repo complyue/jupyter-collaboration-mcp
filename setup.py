@@ -31,7 +31,7 @@ setup(
             "jupyter-collaboration-mcp=jupyter_collaboration_mcp.__main__:main",
         ],
         "jupyter_serverextensions": [
-            "jupyter_collaboration_mcp = jupyter_collaboration_mcp:_load_jupyter_server_extension",
+            "jupyter_collaboration_mcp = jupyter_collaboration_mcp:_jupyter_server_extension_points",
         ],
     },
     author="Jupyter Collaboration Team",
