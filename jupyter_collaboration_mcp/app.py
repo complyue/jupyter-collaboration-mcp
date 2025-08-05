@@ -18,6 +18,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from tornado import httputil
+from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
 
 from .auth import authenticate_mcp_request, configure_auth_with_token
@@ -124,8 +125,15 @@ class MCPHandler(RequestHandler):
                     self.write(message.get("body", b""))
                     self.finish()
 
+            # Initialize the session manager for this request if needed
+            if not self.mcp_server._session_manager_started:
+                logger.info("Starting session manager for the first request")
+                # Start the session manager context and keep it running
+                self.mcp_server._session_manager_context = self.mcp_server.session_manager.run()
+                await self.mcp_server._session_manager_context.__aenter__()
+                self.mcp_server._session_manager_started = True
+
             # Process the request through the session manager
-            # Note: The session manager is already running as part of the application lifecycle
             await self.mcp_server.session_manager.handle_request(scope, receive, send)
         except Exception as e:
             logger.error(f"Error handling MCP request: {e}", exc_info=True)
@@ -154,17 +162,39 @@ class MCPServerExtension(ExtensionApp):
             
         self.mcp_server = MCPServer()
         
-        # Start the session manager in the background
-        asyncio.create_task(self._start_session_manager())
+        # Start the session manager using Tornado's IOLoop
+        IOLoop.current().add_callback(self._start_session_manager)
         
         self.log.info("Jupyter Collaboration MCP Server extension initialized")
     
     async def _start_session_manager(self):
         """Start the session manager and keep it running."""
-        async with self.mcp_server.session_manager.run():
-            # Keep the session manager running indefinitely
-            while True:
-                await asyncio.sleep(3600)  # Sleep for an hour
+        try:
+            async with self.mcp_server.session_manager.run():
+                self.log.info("Session manager started successfully")
+                # Keep the session manager running indefinitely
+                while True:
+                    await asyncio.sleep(3600)  # Sleep for an hour
+        except Exception as e:
+            self.log.error(f"Error in session manager: {e}", exc_info=True)
+    
+    def stop_extension(self):
+        """Stop the extension and clean up resources."""
+        if hasattr(self, 'mcp_server') and self.mcp_server._session_manager_started:
+            self.log.info("Stopping session manager")
+            # Properly exit the context manager
+            if hasattr(self.mcp_server, '_session_manager_context'):
+                IOLoop.current().add_callback(self._stop_session_manager)
+    
+    async def _stop_session_manager(self):
+        """Stop the session manager and clean up resources."""
+        try:
+            if hasattr(self.mcp_server, '_session_manager_context'):
+                await self.mcp_server._session_manager_context.__aexit__(None, None, None)
+                self.mcp_server._session_manager_started = False
+                self.log.info("Session manager stopped successfully")
+        except Exception as e:
+            self.log.error(f"Error stopping session manager: {e}", exc_info=True)
 
     def initialize_handlers(self):
         """Initialize the handlers for the extension."""
@@ -198,6 +228,7 @@ class MCPServer:
             app=self.server,
             event_store=self.event_store,
         )
+        self._session_manager_started = False
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -217,6 +248,14 @@ class MCPServer:
                 user = await authenticate_mcp_request(scope)
                 # Add user to context for handlers
                 scope["user"] = user
+
+                # Initialize the session manager for this request if needed
+                if not self._session_manager_started:
+                    logger.info("Starting session manager for the first request (Starlette)")
+                    # Start the session manager context and keep it running
+                    self._session_manager_context = self.session_manager.run()
+                    await self._session_manager_context.__aenter__()
+                    self._session_manager_started = True
 
                 # Process the request with the shared session manager
                 await self.session_manager.handle_request(scope, receive, send)
