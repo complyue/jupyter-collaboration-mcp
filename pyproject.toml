@@ -1,0 +1,79 @@
+[project]
+name = "jupyter-collaboration-mcp"
+version = "0.1.0"
+description = "MCP server for Jupyter Collaboration features"
+readme = "DESIGN.md"
+license = {text = "BSD-3-Clause"}
+authors = [
+    {name = "Jupyter Collaboration Team"}
+]
+keywords = ["jupyter", "collaboration", "mcp", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "jupyter-server>=2.0.0",
+    "jupyter-collaboration>=2.0.0",
+    "mcp>=1.0.0",
+    "starlette>=0.27.0",
+    "uvicorn>=0.23.0",
+    "pydantic>=2.0.0",
+    "anyio>=4.0.0",
+    "pyjwt>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jupyter/jupyter-collaboration-mcp"
+Documentation = "https://jupyter-collaboration-mcp.readthedocs.io"
+Repository = "https://github.com/jupyter/jupyter-collaboration-mcp"
+Issues = "https://github.com/jupyter/jupyter-collaboration-mcp/issues"
+
+[project.scripts]
+jupyter-collaboration-mcp = "jupyter_collaboration_mcp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["jupyter_collaboration_mcp*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
