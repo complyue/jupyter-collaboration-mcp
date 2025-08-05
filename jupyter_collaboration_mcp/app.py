@@ -96,7 +96,7 @@ class MCPHandler(RequestHandler):
                 "headers": [
                     (k.lower().encode(), v.encode()) for k, v in self.request.headers.get_all()
                 ],
-                "server": (self.request.host_name, self.request.port),
+                "server": self.request.host,
             }
 
             # Create receive and send functions
@@ -123,8 +123,9 @@ class MCPHandler(RequestHandler):
                     self.write(message.get("body", b""))
                     self.finish()
 
-            # Process the request through the session manager
-            await self.mcp_server.session_manager.handle_request(scope, receive, send)
+            # Process the request through the session manager within a context manager
+            async with self.mcp_server.session_manager.run():
+                await self.mcp_server.session_manager.handle_request(scope, receive, send)
         except Exception as e:
             logger.error(f"Error handling MCP request: {e}", exc_info=True)
             self.set_status(500)
@@ -159,6 +160,7 @@ class MCPServerExtension(ExtensionApp):
         if not hasattr(self, "mcp_server"):
             self.mcp_server = MCPServer()
 
+        # Create the app
         app = self.mcp_server.create_app()
 
         # Add the MCP server to the Jupyter server app using a Tornado handler
@@ -191,6 +193,7 @@ class MCPServer:
 
     def create_app(self):
         """Create the Starlette application with MCP endpoints."""
+        # Initialize the session manager
         self.session_manager = StreamableHTTPSessionManager(
             app=self.server,
             event_store=self.event_store,
