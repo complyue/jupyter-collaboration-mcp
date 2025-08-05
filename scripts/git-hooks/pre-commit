@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Pre-commit hook to format code with black and isort
+
+# Get the list of staged Python files
+PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$')
+
+if [ -z "$PYTHON_FILES" ]; then
+    echo "No Python files to format."
+    exit 0
+fi
+
+# Format with black
+echo "Running black..."
+echo "$PYTHON_FILES" | xargs black --line-length=100
+
+# Format imports with isort
+echo "Running isort..."
+echo "$PYTHON_FILES" | xargs isort --profile=black --line-length=100
+
+# Add the formatted files back to the staging area
+echo "$PYTHON_FILES" | xargs git add
+
+echo "Code formatted successfully."
+exit 0
