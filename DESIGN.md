@@ -252,17 +252,6 @@ jupyter-collaboration-mcp/
   ```
 - **Returns**: Execution result including output and execution count
 
-#### 4. Notebook Collaboration Events
-
-##### Resource: `notebook_changes`
-- **Description**: Stream of changes made to a notebook
-- **URI Pattern**: `collaboration://notebooks/{path}/changes`
-- **Events**: Cell updates, insertions, deletions, execution results
-
-##### Resource: `notebook_execution`
-- **Description**: Stream of cell execution events
-- **URI Pattern**: `collaboration://notebooks/{path}/execution`
-- **Events**: Cell execution start, completion, errors
 
 ### Document Collaboration Features
 
@@ -510,17 +499,6 @@ jupyter-collaboration-mcp/
   ```
 - **Returns**: Confirmation of the merge
 
-#### 5. Document Collaboration Events
-
-##### Resource: `document_changes`
-- **Description**: Stream of changes made to a document
-- **URI Pattern**: `collaboration://documents/{path}/changes`
-- **Events**: Text insertions, deletions, formatting changes
-
-##### Resource: `document_forks`
-- **Description**: Stream of document fork events
-- **URI Pattern**: `collaboration://documents/{path}/forks`
-- **Events**: Fork creation, updates, merges
 
 ### Awareness and User Presence Features
 
@@ -760,22 +738,6 @@ jupyter-collaboration-mcp/
   ```
 - **Returns**: Confirmation of leaving the session
 
-#### 5. Awareness Events
-
-##### Resource: `user_presence`
-- **Description**: Stream of user presence changes
-- **URI Pattern**: `collaboration://awareness/presence`
-- **Events**: User online, offline, status changes, activity updates
-
-##### Resource: `cursor_movements`
-- **Description**: Stream of cursor position changes
-- **URI Pattern**: `collaboration://awareness/cursors/{document_path}`
-- **Events**: Cursor position updates, selection changes
-
-##### Resource: `session_activity`
-- **Description**: Stream of collaboration session activities
-- **URI Pattern**: `collaboration://awareness/sessions/{session_id}`
-- **Events**: User joins/leaves, document changes, execution events
 
 ## Authentication and Authorization
 
@@ -891,11 +853,10 @@ class MCPServer:
         self._setup_handlers()
     
     def _setup_handlers(self):
-        # Register all MCP tools and resources
+        # Register all MCP tools
         self._register_notebook_tools()
         self._register_document_tools()
         self._register_awareness_tools()
-        self._register_resources()
     
     def create_app(self):
         """Create the Starlette application with MCP endpoints."""
@@ -1204,7 +1165,7 @@ def _load_jupyter_server_extension(server_app):
 1. **Create Project Structure**: Set up the initial project structure and dependencies
 2. **Implement Core MCP Server**: Build the basic MCP server with authentication
 3. **Implement RTC Adapter**: Create the bridge between MCP and Jupyter Collaboration
-4. **Implement Endpoints**: Add support for all defined MCP tools and resources
+4. **Implement Endpoints**: Add support for all defined MCP tools
 5. **Testing**: Write comprehensive tests for all functionality
 6. **Documentation**: Create user and developer documentation
 7. **Deployment**: Package and distribute the extension

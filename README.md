@@ -218,14 +218,6 @@ The server exposes the following MCP tools:
 - `join_session`: Join a collaboration session
 - `leave_session`: Leave a collaboration session
 
-### MCP Resources
-
-The server exposes the following MCP resources for real-time updates:
-
-- `collaboration://notebooks`: Notebook resources
-- `collaboration://documents`: Document resources
-- `collaboration://awareness`: User awareness resources
-
 ### Authentication
 
 All MCP requests must include a JWT token in the Authorization header:

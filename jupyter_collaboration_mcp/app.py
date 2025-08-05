@@ -4,7 +4,6 @@ Main MCP Server application for Jupyter Collaboration.
 This module implements the core MCP server that exposes Jupyter Collaboration's
 real-time collaboration (RTC) functionalities to AI agents.
 """
-
 import asyncio
 import logging
 from typing import AsyncIterator
@@ -16,6 +15,8 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from jupyter_server.extension.application import ExtensionApp
+from tornado.web import RequestHandler
+from tornado import httputil
 
 from .event_store import InMemoryEventStore
 from .auth import authenticate_mcp_request
@@ -23,6 +24,103 @@ from .rtc_adapter import RTCAdapter
 from .handlers import NotebookHandlers, DocumentHandlers, AwarenessHandlers
 
 logger = logging.getLogger(__name__)
+
+
+class MCPHandler(RequestHandler):
+    """Tornado request handler for MCP requests."""
+    
+    SUPPORTED_METHODS = ('GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS')
+    
+    def initialize(self, mcp_server):
+        self.mcp_server = mcp_server
+    
+    async def prepare(self):
+        """Prepare the request handler."""
+        # Authenticate the request
+        try:
+            user = await authenticate_mcp_request(self.request)
+            # Add user to context for handlers
+            self.request.user = user
+        except Exception as e:
+            logger.error(f"Error authenticating MCP request: {e}")
+            self.set_status(401)
+            self.finish("Unauthorized")
+            return
+    
+    async def get(self):
+        """Handle GET requests."""
+        await self._handle_request()
+    
+    async def post(self):
+        """Handle POST requests."""
+        await self._handle_request()
+    
+    async def put(self):
+        """Handle PUT requests."""
+        await self._handle_request()
+    
+    async def delete(self):
+        """Handle DELETE requests."""
+        await self._handle_request()
+    
+    async def patch(self):
+        """Handle PATCH requests."""
+        await self._handle_request()
+    
+    async def head(self):
+        """Handle HEAD requests."""
+        await self._handle_request()
+    
+    async def options(self):
+        """Handle OPTIONS requests."""
+        await self._handle_request()
+    
+    async def _handle_request(self):
+        """Handle the MCP request using the session manager."""
+        try:
+            # Create a scope for the ASGI application
+            scope = {
+                "type": "http",
+                "method": self.request.method,
+                "path": self.request.path,
+                "query_string": self.request.query.encode(),
+                "headers": [
+                    (k.lower().encode(), v.encode())
+                    for k, v in self.request.headers.get_all()
+                ],
+                "server": (self.request.host_name, self.request.port),
+            }
+            
+            # Create receive and send functions
+            async def receive():
+                # Return the request body
+                return {
+                    "type": "http.request",
+                    "body": self.request.body,
+                    "more_body": False,
+                }
+            
+            # Send the response back to Tornado
+            async def send(message):
+                if message["type"] == "http.response.start":
+                    self.set_status(message["status"])
+                    for name, value in message.get("headers", []):
+                        name_str = name.decode()
+                        value_str = value.decode()
+                        if name_str.lower() == "content-type":
+                            self.set_header(name_str, value_str)
+                        else:
+                            self.add_header(name_str, value_str)
+                elif message["type"] == "http.response.body":
+                    self.write(message.get("body", b""))
+                    self.finish()
+            
+            # Process the request through the session manager
+            await self.mcp_server.session_manager.handle_request(scope, receive, send)
+        except Exception as e:
+            logger.error(f"Error handling MCP request: {e}")
+            self.set_status(500)
+            self.finish("Internal server error")
 
 
 class MCPServerExtension(ExtensionApp):
@@ -46,13 +144,10 @@ class MCPServerExtension(ExtensionApp):
         
         app = self.mcp_server.create_app()
         
-        # Add the MCP server to the Jupyter server app
-        self.handlers.extend([
-            (r"/mcp/.*", app)
-        ])
+        # Add the MCP server to the Jupyter server app using a Tornado handler
+        self.serverapp.web_app.add_handlers('.*', [(r"/mcp/.*", MCPHandler, {'mcp_server': self.mcp_server})])
         
-        # Initialize the RTC adapter
-        asyncio.create_task(self.mcp_server.rtc_adapter.initialize(self.serverapp))
+        # RTC adapter initialization will be deferred until first use
         
         self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
 
@@ -69,95 +164,12 @@ class MCPServer:
         self._setup_handlers()
     
     def _setup_handlers(self):
-        """Register all MCP tools and resources."""
+        """Register all MCP tools."""
         # Initialize handlers
         notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
         document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
         awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
-        
-        # Register resources
-        self._register_resources()
     
-    def _register_resources(self):
-        """Register all MCP resources."""
-        
-        @self.server.list_resources()
-        async def handle_list_resources() -> list[types.Resource]:
-            """List available collaboration resources."""
-            return [
-                types.Resource(
-                    uri="collaboration://notebooks",
-                    name="Jupyter Notebooks",
-                    description="Collaborative Jupyter notebooks",
-                    mimeType="application/json"
-                ),
-                types.Resource(
-                    uri="collaboration://documents",
-                    name="Shared Documents",
-                    description="Collaborative documents",
-                    mimeType="application/json"
-                ),
-                types.Resource(
-                    uri="collaboration://awareness",
-                    name="User Awareness",
-                    description="User presence and activity information",
-                    mimeType="application/json"
-                ),
-            ]
-        
-        @self.server.read_resource()
-        async def handle_read_resource(uri: str) -> types.ReadResourceResult:
-            """Read a collaboration resource."""
-            if uri.startswith("collaboration://notebooks/"):
-                # Handle notebook resources
-                path = uri.replace("collaboration://notebooks/", "")
-                content = await self.rtc_adapter.get_notebook_content(path)
-                return types.ReadResourceResult(
-                    contents=[
-                        types.TextResourceContents(
-                            uri=uri,
-                            text=content,
-                            mimeType="application/json"
-                        )
-                    ]
-                )
-            elif uri.startswith("collaboration://documents/"):
-                # Handle document resources
-                path = uri.replace("collaboration://documents/", "")
-                content = await self.rtc_adapter.get_document_content(path)
-                return types.ReadResourceResult(
-                    contents=[
-                        types.TextResourceContents(
-                            uri=uri,
-                            text=content,
-                            mimeType="text/plain"
-                        )
-                    ]
-                )
-            elif uri.startswith("collaboration://awareness/"):
-                # Handle awareness resources
-                resource_type = uri.replace("collaboration://awareness/", "")
-                content = await self.rtc_adapter.get_awareness_info(resource_type)
-                return types.ReadResourceResult(
-                    contents=[
-                        types.TextResourceContents(
-                            uri=uri,
-                            text=content,
-                            mimeType="application/json"
-                        )
-                    ]
-                )
-            else:
-                raise ValueError(f"Unknown resource URI: {uri}")
-        
-        @self.server.subscribe_resource()
-        async def handle_subscribe_resource(uri: str) -> types.SubscribeResourceResult:
-            """Subscribe to resource changes."""
-            # Create a stream ID for this subscription
-            stream_id = f"resource:{uri}"
-            
-            # Return the subscription result
-            return types.SubscribeResourceResult(streamId=stream_id)
     
     def create_app(self):
         """Create the Starlette application with MCP endpoints."""
