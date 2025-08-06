@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from tornado.httputil import HTTPHeaders
+from tornado.web import HTTPError
 
 from jupyter_collaboration_mcp.auth import (
     AuthConfig,
@@ -315,7 +317,7 @@ async def test_authenticate_mcp_request_missing_header():
     scope = {"headers": []}
 
     # Authenticate the request
-    with pytest.raises(Exception):  # Should raise HTTPError
+    with pytest.raises(HTTPError):  # Should raise HTTPError
         await authenticate_mcp_request(scope)
 
 
@@ -334,7 +336,7 @@ async def test_authenticate_mcp_request_invalid_header():
     scope = {"headers": [(b"authorization", b"Bearer test-token")]}
 
     # Authenticate the request
-    with pytest.raises(Exception):  # Should raise HTTPError
+    with pytest.raises(HTTPError):  # Should raise HTTPError
         await authenticate_mcp_request(scope)
 
 
@@ -358,7 +360,7 @@ async def test_authenticate_mcp_request_invalid_token():
     }
 
     # Authenticate the request
-    with pytest.raises(Exception):  # Should raise HTTPError
+    with pytest.raises(HTTPError):  # Should raise HTTPError
         await authenticate_mcp_request(scope)
 
 
@@ -386,7 +388,7 @@ async def test_authenticate_mcp_request_rate_limited():
         await authenticate_mcp_request(scope)
 
     # The next request should be rate limited
-    with pytest.raises(Exception):  # Should raise HTTPError
+    with pytest.raises(HTTPError):  # Should raise HTTPError
         await authenticate_mcp_request(scope)
 
 
@@ -414,5 +416,5 @@ async def test_authenticate_mcp_request_cors_denied():
     }
 
     # Authenticate the request
-    with pytest.raises(Exception):  # Should raise HTTPError
+    with pytest.raises(HTTPError):  # Should raise HTTPError
         await authenticate_mcp_request(scope)

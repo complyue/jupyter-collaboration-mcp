@@ -5,27 +5,23 @@ This module implements the core MCP server that exposes Jupyter Collaboration's
 real-time collaboration (RTC) functionalities to AI agents.
 """
 
-import asyncio
-import contextlib
+import json
 import logging
 import sys
-from typing import AsyncIterator
+from typing import Any, Dict, Optional
 
-import anyio
 import mcp.types as types
 from jupyter_server.extension.application import ExtensionApp
 from mcp.server.lowlevel import Server
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from starlette.applications import Starlette
-from starlette.routing import Mount
-from tornado import httputil
+from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
 
 from .auth import authenticate_mcp_request, configure_auth_with_token
-from .event_store import InMemoryEventStore
 from .handlers import AwarenessHandlers, DocumentHandlers, NotebookHandlers
 from .rtc_adapter import RTCAdapter
+from .tornado_event_store import TornadoEventStore
+from .tornado_session_manager import TornadoSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +31,10 @@ class MCPHandler(RequestHandler):
 
     SUPPORTED_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
 
-    def initialize(self, mcp_server):
-        self.mcp_server = mcp_server
-
+    def initialize(self, session_manager: TornadoSessionManager, serverapp: Optional[Any] = None):
+        """Initialize the handler with required dependencies."""
+        self.session_manager = session_manager
+        self.serverapp = serverapp
 
     def check_xsrf_cookie(self):
         # Skip XSRF check for MCP endpoints
@@ -46,6 +43,12 @@ class MCPHandler(RequestHandler):
     def xsrf_token(self):
         # Override xsrf_token to disable CSRF token generation.
         return None
+
+    def set_default_headers(self):
+        """Set default headers for all responses."""
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
     async def prepare(self):
         """Prepare the request handler."""
@@ -68,95 +71,79 @@ class MCPHandler(RequestHandler):
             self.finish("Unauthorized")
             return
 
-    async def get(self):
-        """Handle GET requests."""
-        await self._handle_request()
-
-    async def post(self):
-        """Handle POST requests."""
-        await self._handle_request()
-
-    async def put(self):
-        """Handle PUT requests."""
-        await self._handle_request()
-
-    async def delete(self):
-        """Handle DELETE requests."""
-        await self._handle_request()
-
-    async def patch(self):
-        """Handle PATCH requests."""
-        await self._handle_request()
-
-    async def head(self):
-        """Handle HEAD requests."""
-        await self._handle_request()
-
-    async def options(self):
-        """Handle OPTIONS requests."""
-        await self._handle_request()
-
-    async def _handle_request(self):
-        """Handle the MCP request using the session manager."""
+    async def get(self, path: str = ""):
+        """Handle GET requests for SSE streams."""
         try:
             # Print debug info to stderr
-            print(f"DEBUG: Received MCP request: {self.request.method} {self.request.path}", file=sys.stderr)
+            print(f"DEBUG: Received MCP GET request: {self.request.method} {self.request.path}", file=sys.stderr)
+            print(f"DEBUG: Request headers:", file=sys.stderr)
+            for name, value in self.request.headers.get_all():
+                print(f"DEBUG:   {name}: {value}", file=sys.stderr)
+            
+            # Handle the request with the session manager
+            await self.session_manager.handle_request(self)
+        except Exception as e:
+            logger.error(f"Error handling MCP GET request: {e}", exc_info=True)
+            self.set_status(500)
+            self.finish("Internal server error")
+
+    async def post(self, path: str = ""):
+        """Handle POST requests containing MCP messages."""
+        try:
+            # Print debug info to stderr
+            print(f"DEBUG: Received MCP POST request: {self.request.method} {self.request.path}", file=sys.stderr)
             print(f"DEBUG: Request headers:", file=sys.stderr)
             for name, value in self.request.headers.get_all():
                 print(f"DEBUG:   {name}: {value}", file=sys.stderr)
             print(f"DEBUG: Request body: {self.request.body}", file=sys.stderr)
             
-            # Create a scope for the ASGI application
-            scope = {
-                "type": "http",
-                "method": self.request.method,
-                "path": self.request.path,
-                "query_string": self.request.query.encode(),
-                "headers": [
-                    (k.lower().encode(), v.encode()) for k, v in self.request.headers.get_all()
-                ],
-                "server": self.request.host,
-            }
-
-            # Create receive and send functions
-            async def receive():
-                # Return the request body
-                return {
-                    "type": "http.request",
-                    "body": self.request.body,
-                    "more_body": False,
-                }
-
-            # Send the response back to Tornado
-            async def send(message):
-                print(f"DEBUG: Sending response: {message}", file=sys.stderr)
-                if message["type"] == "http.response.start":
-                    self.set_status(message["status"])
-                    for name, value in message.get("headers", []):
-                        name_str = name.decode()
-                        value_str = value.decode()
-                        if name_str.lower() == "content-type":
-                            self.set_header(name_str, value_str)
-                        else:
-                            self.add_header(name_str, value_str)
-                elif message["type"] == "http.response.body":
-                    self.write(message.get("body", b""))
-                    self.finish()
-
-            # Initialize the session manager for this request if needed
-            if not self.mcp_server._session_manager_started:
-                print("DEBUG: Starting session manager for the first request", file=sys.stderr)
-                # Start the session manager context and keep it running
-                self.mcp_server._session_manager_context = self.mcp_server.session_manager.run()
-                await self.mcp_server._session_manager_context.__aenter__()
-                self.mcp_server._session_manager_started = True
-
-            # Process the request through the session manager
-            await self.mcp_server.session_manager.handle_request(scope, receive, send)
+            # Handle the request with the session manager
+            await self.session_manager.handle_request(self)
         except Exception as e:
-            logger.error(f"Error handling MCP request: {e}", exc_info=True)
+            logger.error(f"Error handling MCP POST request: {e}", exc_info=True)
             self.set_status(500)
             self.finish("Internal server error")
+
+    async def put(self, path: str = ""):
+        """Handle PUT requests."""
+        try:
+            await self.session_manager.handle_request(self)
+        except Exception as e:
+            logger.error(f"Error handling MCP PUT request: {e}", exc_info=True)
+            self.set_status(500)
+            self.finish("Internal server error")
+
+    async def delete(self, path: str = ""):
+        """Handle DELETE requests for session termination."""
+        try:
+            await self.session_manager.handle_request(self)
+        except Exception as e:
+            logger.error(f"Error handling MCP DELETE request: {e}", exc_info=True)
+            self.set_status(500)
+            self.finish("Internal server error")
+
+    async def patch(self, path: str = ""):
+        """Handle PATCH requests."""
+        try:
+            await self.session_manager.handle_request(self)
+        except Exception as e:
+            logger.error(f"Error handling MCP PATCH request: {e}", exc_info=True)
+            self.set_status(500)
+            self.finish("Internal server error")
+
+    async def head(self, path: str = ""):
+        """Handle HEAD requests."""
+        try:
+            await self.session_manager.handle_request(self)
+        except Exception as e:
+            logger.error(f"Error handling MCP HEAD request: {e}", exc_info=True)
+            self.set_status(500)
+            self.finish("Internal server error")
+
+    def options(self, *args, **kwargs):
+        """Handle OPTIONS requests for CORS preflight."""
+        self.set_status(204)
+        self.finish()
 
 
 class MCPServerExtension(ExtensionApp):
@@ -180,39 +167,25 @@ class MCPServerExtension(ExtensionApp):
             
         self.mcp_server = MCPServer()
         
-        # Start the session manager using Tornado's IOLoop
-        IOLoop.current().add_callback(self._start_session_manager)
-        
         self.log.info("Jupyter Collaboration MCP Server extension initialized")
-    
-    async def _start_session_manager(self):
-        """Start the session manager and keep it running."""
-        try:
-            async with self.mcp_server.session_manager.run():
-                self.log.info("Session manager started successfully")
-                # Keep the session manager running indefinitely
-                while True:
-                    await asyncio.sleep(3600)  # Sleep for an hour
-        except Exception as e:
-            self.log.error(f"Error in session manager: {e}", exc_info=True)
     
     def stop_extension(self):
         """Stop the extension and clean up resources."""
-        if hasattr(self, 'mcp_server') and self.mcp_server._session_manager_started:
-            self.log.info("Stopping session manager")
-            # Properly exit the context manager
-            if hasattr(self.mcp_server, '_session_manager_context'):
-                IOLoop.current().add_callback(self._stop_session_manager)
+        if hasattr(self, 'mcp_server'):
+            self.log.info("Stopping MCP server")
+            # Clean up sessions
+            IOLoop.current().add_callback(self._cleanup_sessions)
     
-    async def _stop_session_manager(self):
-        """Stop the session manager and clean up resources."""
+    async def _cleanup_sessions(self):
+        """Clean up all active sessions."""
         try:
-            if hasattr(self.mcp_server, '_session_manager_context'):
-                await self.mcp_server._session_manager_context.__aexit__(None, None, None)
-                self.mcp_server._session_manager_started = False
-                self.log.info("Session manager stopped successfully")
+            if hasattr(self.mcp_server, 'session_manager'):
+                # End all active sessions
+                for session_id in list(self.mcp_server.session_manager._sessions.keys()):
+                    await self.mcp_server.session_manager.end_session(session_id)
+                self.log.info("All sessions cleaned up")
         except Exception as e:
-            self.log.error(f"Error stopping session manager: {e}", exc_info=True)
+            self.log.error(f"Error cleaning up sessions: {e}", exc_info=True)
 
     def initialize_handlers(self):
         """Initialize the handlers for the extension."""
@@ -220,12 +193,9 @@ class MCPServerExtension(ExtensionApp):
         if not hasattr(self, "mcp_server"):
             self.mcp_server = MCPServer()
 
-        # Create the app
-        app = self.mcp_server.create_app()
-
         # Add the MCP server to the Jupyter server app using a Tornado handler
         self.serverapp.web_app.add_handlers(
-            ".*", [(r"/mcp.*", MCPHandler, {"mcp_server": self.mcp_server})]
+            ".*", [(r"/mcp.*", MCPHandler, {"session_manager": self.mcp_server.session_manager, "serverapp": self.serverapp})]
         )
 
         # RTC adapter initialization will be deferred until first use
@@ -240,13 +210,12 @@ class MCPServer:
         """Initialize the MCP server."""
         self.server = Server("jupyter-collaboration-mcp")
         self.rtc_adapter = RTCAdapter()
-        self.event_store = InMemoryEventStore()
+        self.event_store = TornadoEventStore()
         # Create a single session manager for the entire application
-        self.session_manager = StreamableHTTPSessionManager(
-            app=self.server,
+        self.session_manager = TornadoSessionManager(
+            mcp_server=self.server,
             event_store=self.event_store,
         )
-        self._session_manager_started = False
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -257,60 +226,22 @@ class MCPServer:
         self.awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
 
     def create_app(self):
-        """Create the Starlette application with MCP endpoints."""
-
-        async def handle_mcp_request(scope, receive, send):
-            """Handle MCP requests with authentication."""
-            try:
-                # Authenticate the request
-                user = await authenticate_mcp_request(scope)
-                # Add user to context for handlers
-                scope["user"] = user
-
-                # Initialize the session manager for this request if needed
-                if not self._session_manager_started:
-                    logger.info("Starting session manager for the first request (Starlette)")
-                    # Start the session manager context and keep it running
-                    self._session_manager_context = self.session_manager.run()
-                    await self._session_manager_context.__aenter__()
-                    self._session_manager_started = True
-
-                # Process the request with the shared session manager
-                await self.session_manager.handle_request(scope, receive, send)
-            except Exception as e:
-                logger.error(f"Error handling MCP request: {e}", exc_info=True)
-                # Send error response
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 500,
-                        "headers": [[b"content-type", b"text/plain"]],
-                    }
-                )
-                await send(
-                    {
-                        "type": "http.response.body",
-                        "body": b"Internal server error",
-                    }
-                )
-
-        app = Starlette(
-            routes=[
-                Mount("/mcp", app=handle_mcp_request),
-            ],
-        )
-        return app
+        """Create a simple Tornado application with MCP endpoints."""
+        # This method is kept for compatibility but is not used in the Tornado-native implementation
+        # The actual handling is done by the MCPHandler class
+        return None
 
     async def broadcast_event(self, event_type: str, data: dict):
         """Broadcast an event to all connected clients."""
-        event_message = {"type": event_type, "data": data, "timestamp": anyio.current_time()}
+        event_message = {"type": event_type, "data": data, "timestamp": IOLoop.current().time()}
 
         # Store the event
         await self.event_store.store_event(stream_id="broadcast", message=event_message)
 
-        # Note: With a shared session manager, broadcasting is now possible
-        # This functionality can be implemented in the future if needed
-        logger.info(f"Broadcast event stored: {event_type}")
+        # Broadcast to all active sessions
+        await self.session_manager.broadcast_event(event_type, data)
+        
+        logger.info(f"Broadcast event sent: {event_type}")
 
     async def get_server_info(self) -> dict:
         """Get server information."""

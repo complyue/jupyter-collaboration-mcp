@@ -5,6 +5,7 @@ Tests for MCP request handlers.
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from mcp.types import TextContent
 
 from jupyter_collaboration_mcp.handlers import AwarenessHandlers, DocumentHandlers, NotebookHandlers
 
@@ -58,11 +59,7 @@ async def test_list_notebooks(notebook_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            break
+    handler = notebook_handlers.list_notebooks
 
     assert handler is not None
 
@@ -71,7 +68,7 @@ async def test_list_notebooks(notebook_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "Test Notebook" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -92,12 +89,7 @@ async def test_get_notebook(notebook_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_notebook":
-                break
+    handler = notebook_handlers.get_notebook
 
     assert handler is not None
 
@@ -108,7 +100,7 @@ async def test_get_notebook(notebook_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "cells" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -119,12 +111,7 @@ async def test_get_notebook(notebook_handlers, mock_rtc_adapter):
 async def test_get_notebook_missing_path(notebook_handlers):
     """Test getting a notebook without a path."""
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_notebook":
-                break
+    handler = notebook_handlers.get_notebook
 
     assert handler is not None
 
@@ -147,12 +134,7 @@ async def test_create_notebook_session(notebook_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "create_notebook_session":
-                break
+    handler = notebook_handlers.create_notebook_session
 
     assert handler is not None
 
@@ -161,7 +143,7 @@ async def test_create_notebook_session(notebook_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "test-session-id" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -177,12 +159,7 @@ async def test_update_notebook_cell(notebook_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "update_notebook_cell":
-                break
+    handler = notebook_handlers.update_notebook_cell
 
     assert handler is not None
 
@@ -199,7 +176,7 @@ async def test_update_notebook_cell(notebook_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "test-cell-id" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -226,12 +203,7 @@ async def test_list_documents(document_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in document_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "list_documents":
-                break
+    handler = document_handlers.list_documents
 
     assert handler is not None
 
@@ -242,7 +214,7 @@ async def test_list_documents(document_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "Test Document" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -263,12 +235,7 @@ async def test_get_document(document_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in document_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_document":
-                break
+    handler = document_handlers.get_document
 
     assert handler is not None
 
@@ -279,7 +246,7 @@ async def test_get_document(document_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "Test Document" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -295,12 +262,7 @@ async def test_update_document(document_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in document_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "update_document":
-                break
+    handler = document_handlers.update_document
 
     assert handler is not None
 
@@ -317,7 +279,7 @@ async def test_update_document(document_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "version" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -341,12 +303,7 @@ async def test_fork_document(document_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in document_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "fork_document":
-                break
+    handler = document_handlers.fork_document
 
     assert handler is not None
 
@@ -363,7 +320,7 @@ async def test_fork_document(document_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "test-fork-id" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -389,12 +346,7 @@ async def test_get_online_users(awareness_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in awareness_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_online_users":
-                break
+    handler = awareness_handlers.get_online_users
 
     assert handler is not None
 
@@ -403,7 +355,7 @@ async def test_get_online_users(awareness_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "User 1" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -424,12 +376,7 @@ async def test_get_user_presence(awareness_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in awareness_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_user_presence":
-                break
+    handler = awareness_handlers.get_user_presence
 
     assert handler is not None
 
@@ -440,7 +387,7 @@ async def test_get_user_presence(awareness_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "online" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -451,12 +398,7 @@ async def test_get_user_presence(awareness_handlers, mock_rtc_adapter):
 async def test_get_user_presence_missing_user_id(awareness_handlers):
     """Test getting user presence without a user ID."""
     # Get the handler function
-    handler = None
-    for decorator in awareness_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "get_user_presence":
-                break
+    handler = awareness_handlers.get_user_presence
 
     assert handler is not None
 
@@ -480,12 +422,7 @@ async def test_update_cursor_position(awareness_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in awareness_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "update_cursor_position":
-                break
+    handler = awareness_handlers.update_cursor_position
 
     assert handler is not None
 
@@ -501,7 +438,7 @@ async def test_update_cursor_position(awareness_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "line" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -521,12 +458,7 @@ async def test_join_session(awareness_handlers, mock_rtc_adapter):
     )
 
     # Get the handler function
-    handler = None
-    for decorator in awareness_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            if hasattr(handler, "__name__") and handler.__name__ == "join_session":
-                break
+    handler = awareness_handlers.join_session
 
     assert handler is not None
 
@@ -535,7 +467,7 @@ async def test_join_session(awareness_handlers, mock_rtc_adapter):
 
     # Check the result
     assert len(result) == 1
-    assert result[0].type == "text"
+    assert isinstance(result[0], TextContent)
     assert "test-session-id" in result[0].text
 
     # Check that the RTC adapter was called correctly
@@ -546,11 +478,7 @@ async def test_join_session(awareness_handlers, mock_rtc_adapter):
 async def test_unknown_tool(notebook_handlers):
     """Test handling an unknown tool."""
     # Get the handler function
-    handler = None
-    for decorator in notebook_handlers.server.call_tool.mock_calls:
-        if decorator:
-            handler = decorator.args[0]
-            break
+    handler = notebook_handlers.list_notebooks
 
     assert handler is not None
 

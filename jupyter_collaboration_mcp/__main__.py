@@ -6,14 +6,15 @@ or as a Jupyter server extension.
 """
 
 import argparse
-import asyncio
 import logging
 import sys
 
-import uvicorn
 from jupyter_server.serverapp import ServerApp
+from tornado.httpserver import HTTPServer
+from tornado.ioloop import IOLoop
+from tornado.web import Application
 
-from .app import MCPServer
+from .app import MCPServer, MCPHandler
 
 # Configure logging
 logging.basicConfig(
@@ -44,8 +45,7 @@ def create_parser():
 
     return parser
 
-
-async def run_standalone_server(host: str, port: int, jupyter_config: str = None):
+def run_standalone_server(host: str, port: int, jupyter_config: str = None):
     """Run the MCP server as a standalone application."""
     logger.info(f"Starting Jupyter Collaboration MCP Server on {host}:{port}")
 
@@ -56,17 +56,23 @@ async def run_standalone_server(host: str, port: int, jupyter_config: str = None
 
     # Create and configure the MCP server
     mcp_server = MCPServer()
-    app = mcp_server.create_app()
-
+    
     # Initialize the RTC adapter
-    await mcp_server.rtc_adapter.initialize(server_app)
+    IOLoop.current().run_sync(mcp_server.rtc_adapter.initialize, server_app)
 
-    # Run the server
-    config = uvicorn.Config(app, host=host, port=port, log_level="info")
-    server = uvicorn.Server(config)
+    # Create Tornado application
+    app = Application([
+        (r"/mcp.*", MCPHandler, {"session_manager": mcp_server.session_manager})
+    ])
+
+    # Create HTTP server
+    server = HTTPServer(app)
+    server.listen(port, host)
 
     logger.info(f"MCP Server running at http://{host}:{port}/mcp")
-    await server.serve()
+    
+    # Start the event loop
+    IOLoop.current().start()
 
 
 def main():
@@ -79,10 +85,8 @@ def main():
 
     try:
         # Run the server
-        asyncio.run(
-            run_standalone_server(
-                host=args.host, port=args.port, jupyter_config=args.jupyter_config
-            )
+        run_standalone_server(
+            host=args.host, port=args.port, jupyter_config=args.jupyter_config
         )
     except KeyboardInterrupt:
         logger.info("Server stopped by user")

@@ -5,7 +5,6 @@ This module provides an adapter between MCP requests and Jupyter Collaboration's
 real-time collaboration (RTC) functionality using YDoc.
 """
 
-import asyncio
 import json
 import logging
 import uuid
@@ -13,6 +12,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from jupyter_server_ydoc.app import YDocExtension
 from jupyter_server_ydoc.rooms import DocumentRoom
+from tornado import gen
+from tornado.ioloop import IOLoop
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ class RTCAdapter:
             "room_id": room_id,
             "path": path,
             "type": "notebook",
-            "created_at": asyncio.get_event_loop().time(),
+            "created_at": IOLoop.current().time(),
         }
 
         return {"session_id": session_id, "room_id": room_id, "path": path, "status": "active"}
@@ -134,11 +135,10 @@ class RTCAdapter:
 
             # Update the cell content
             await room.update_cell(cell_id, content, cell_type)
-
             return {
                 "success": True,
                 "cell_id": cell_id,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error updating notebook cell: {e}")
@@ -158,12 +158,11 @@ class RTCAdapter:
 
             # Insert the new cell
             cell_id = await room.insert_cell(content, position, cell_type)
-
             return {
                 "success": True,
                 "cell_id": cell_id,
                 "position": position,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error inserting notebook cell: {e}")
@@ -181,11 +180,10 @@ class RTCAdapter:
 
             # Delete the cell
             await room.delete_cell(cell_id)
-
             return {
                 "success": True,
                 "cell_id": cell_id,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error deleting notebook cell: {e}")
@@ -205,12 +203,11 @@ class RTCAdapter:
 
             # Execute the cell
             result = await room.execute_cell(cell_id, timeout)
-
             return {
                 "success": True,
                 "cell_id": cell_id,
                 "result": result,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error executing notebook cell: {e}")
@@ -298,7 +295,7 @@ class RTCAdapter:
 
         # Get or create the room
         room = await self.ydoc_extension.get_room(path, file_type)
-
+        
         # Store session information
         self._sessions[session_id] = {
             "id": session_id,
@@ -306,7 +303,7 @@ class RTCAdapter:
             "path": path,
             "type": "document",
             "file_type": file_type,
-            "created_at": asyncio.get_event_loop().time(),
+            "created_at": IOLoop.current().time(),
         }
 
         return {
@@ -332,12 +329,11 @@ class RTCAdapter:
 
             # Update the document content
             await room.update_content(content, position, length)
-
             return {
                 "success": True,
                 "path": path,
                 "version": await room.get_version(),
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error updating document: {e}")
@@ -356,12 +352,11 @@ class RTCAdapter:
 
             # Insert the text
             new_length = await room.insert_text(text, position)
-
             return {
                 "success": True,
                 "path": path,
                 "new_length": new_length,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error inserting text: {e}")
@@ -385,7 +380,7 @@ class RTCAdapter:
                 "success": True,
                 "path": path,
                 "new_length": new_length,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error deleting text: {e}")
@@ -423,12 +418,11 @@ class RTCAdapter:
 
             # Restore the version
             await room.restore_version(version_id)
-
             return {
                 "success": True,
                 "path": path,
                 "version_id": version_id,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error restoring document version: {e}")
@@ -468,7 +462,7 @@ class RTCAdapter:
                 "title": title or f"Fork of {path}",
                 "description": description or "",
                 "synchronize": synchronize,
-                "created_at": asyncio.get_event_loop().time(),
+                "created_at": IOLoop.current().time(),
             }
 
             return {
@@ -476,7 +470,7 @@ class RTCAdapter:
                 "fork_id": fork_id,
                 "fork_path": fork_path,
                 "title": title or f"Fork of {path}",
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error forking document: {e}")
@@ -518,7 +512,7 @@ class RTCAdapter:
                 "success": True,
                 "path": path,
                 "fork_id": fork_id,
-                "timestamp": asyncio.get_event_loop().time(),
+                "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
             logger.error(f"Error merging document fork: {e}")
@@ -537,14 +531,14 @@ class RTCAdapter:
                 "id": "user1",
                 "name": "User 1",
                 "status": "online",
-                "last_activity": asyncio.get_event_loop().time(),
+                "last_activity": IOLoop.current().time(),
                 "current_document": "/example.ipynb",
             },
             {
                 "id": "user2",
                 "name": "User 2",
                 "status": "away",
-                "last_activity": asyncio.get_event_loop().time() - 300,
+                "last_activity": IOLoop.current().time() - 300,
                 "current_document": "/example.md",
             },
         ]
@@ -585,19 +579,18 @@ class RTCAdapter:
 
         # In a real implementation, this would update the presence system
         user_id = "current_user"  # Would get from authenticated context
-
         self._user_presence[user_id] = {
             "user_id": user_id,
             "status": status,
             "message": message,
-            "last_activity": asyncio.get_event_loop().time(),
+            "last_activity": IOLoop.current().time(),
         }
-
+        
         return {
             "success": True,
             "user_id": user_id,
             "status": status,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": IOLoop.current().time(),
         }
 
     async def get_user_cursors(self, document_path: str) -> List[Dict[str, Any]]:
@@ -626,13 +619,12 @@ class RTCAdapter:
 
         # In a real implementation, this would update the awareness system
         user_id = "current_user"  # Would get from authenticated context
-
         return {
             "success": True,
             "user_id": user_id,
             "document_path": document_path,
             "position": position,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": IOLoop.current().time(),
         }
 
     async def get_user_activity(
@@ -649,14 +641,14 @@ class RTCAdapter:
                 "activity_type": "edit",
                 "description": "Edited notebook cell",
                 "document_path": "/example.ipynb",
-                "timestamp": asyncio.get_event_loop().time() - 60,
+                "timestamp": IOLoop.current().time() - 60,
             },
             {
                 "user_id": "user2",
                 "activity_type": "view",
                 "description": "Opened document",
                 "document_path": "/example.md",
-                "timestamp": asyncio.get_event_loop().time() - 120,
+                "timestamp": IOLoop.current().time() - 120,
             },
         ]
 
@@ -685,7 +677,7 @@ class RTCAdapter:
             "description": description,
             "document_path": document_path,
             "metadata": metadata or {},
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": IOLoop.current().time(),
         }
 
         return {"success": True, "activity": activity}
@@ -713,12 +705,12 @@ class RTCAdapter:
             raise ValueError(f"Session not found: {session_id}")
 
         session = self._sessions[session_id]
-        session["joined_at"] = asyncio.get_event_loop().time()
+        session["joined_at"] = IOLoop.current().time()
 
         return {
             "success": True,
             "session_id": session_id,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": IOLoop.current().time(),
         }
 
     async def leave_session(self, session_id: str) -> Dict[str, Any]:
@@ -730,14 +722,13 @@ class RTCAdapter:
             raise ValueError(f"Session not found: {session_id}")
 
         session = self._sessions[session_id]
-        session["left_at"] = asyncio.get_event_loop().time()
+        session["left_at"] = IOLoop.current().time()
 
         return {
             "success": True,
             "session_id": session_id,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": IOLoop.current().time(),
         }
-
     # Helper methods
 
     def _get_file_type(self, path: str) -> str:
@@ -755,7 +746,7 @@ class RTCAdapter:
         return {
             "collaborators": 1,
             "version": await room.get_version(),
-            "last_activity": asyncio.get_event_loop().time(),
+            "last_activity": IOLoop.current().time(),
         }
 
     # Methods for app.py integration
@@ -910,7 +901,7 @@ class MockDocumentRoom:
         return [
             {
                 "version": self.version - 1,
-                "timestamp": asyncio.get_event_loop().time() - 3600,
+                "timestamp": IOLoop.current().time() - 3600,
                 "changes": "Initial content",
             }
         ]

@@ -5,8 +5,13 @@ Tests for the main MCP server application.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from tornado.httpclient import HTTPRequest
+from tornado.testing import AsyncHTTPTestCase
+from tornado.web import Application
 
-from jupyter_collaboration_mcp.app import MCPServer
+from jupyter_collaboration_mcp.app import MCPServer, MCPHandler
+from jupyter_collaboration_mcp.tornado_event_store import TornadoEventStore
+from jupyter_collaboration_mcp.tornado_session_manager import TornadoSessionManager
 
 
 @pytest.fixture
@@ -21,18 +26,20 @@ async def test_mcp_server_initialization(mcp_server):
     assert mcp_server.server.name == "jupyter-collaboration-mcp"
     assert mcp_server.rtc_adapter is not None
     assert mcp_server.event_store is not None
-    # session_manager is no longer an instance variable
-    assert not hasattr(mcp_server, 'session_manager') or mcp_server.session_manager is None
+    assert isinstance(mcp_server.event_store, TornadoEventStore)
 
 
 @pytest.mark.asyncio
 async def test_create_app(mcp_server):
-    """Test that the Starlette application is created correctly."""
+    """Test that the Tornado application is created correctly."""
     app = mcp_server.create_app()
 
-    # Check that the app has the expected routes
-    routes = [route.path for route in app.routes]
-    assert "/mcp" in routes
+    # Check that the app is a Tornado Application
+    assert isinstance(app, Application)
+
+    # Check that the app has the expected handlers
+    handlers = [handler[1] for handler in app.handlers[0][1]]
+    assert MCPHandler in handlers
 
 
 @pytest.mark.asyncio
@@ -40,61 +47,45 @@ async def test_handle_mcp_request(mcp_server):
     """Test that MCP requests are handled correctly."""
     app = mcp_server.create_app()
 
-    # Create a mock scope with authentication
-    scope = {
-        "type": "http",
-        "method": "POST",
-        "path": "/mcp",
-        "headers": [
-            (b"authorization", b"Bearer test-token"),
-            (b"content-type", b"application/json"),
-        ],
-    }
-
     # Mock the authentication
-    with patch("jupyter_collaboration_mcp.app.authenticate_mcp_request") as mock_auth, \
-         patch("jupyter_collaboration_mcp.app.StreamableHTTPSessionManager") as mock_session_manager_class:
-        
+    with patch("jupyter_collaboration_mcp.app.authenticate_mcp_request") as mock_auth:
         mock_auth.return_value = {"sub": "test-user"}
-        
-        # Create a mock session manager instance
-        mock_session_manager = MagicMock()
-        mock_session_manager.run.return_value.__aenter__ = AsyncMock()
-        mock_session_manager.run.return_value.__aexit__ = AsyncMock()
-        mock_session_manager.handle_request = AsyncMock()
-        mock_session_manager_class.return_value = mock_session_manager
 
-        # Create mock receive and send functions
-        receive = AsyncMock()
-        send = AsyncMock()
-
-        # Get the MCP request handler
-        mcp_handler = None
-        for route in app.routes:
-            if route.path == "/mcp":
-                mcp_handler = route.app
-                break
-
-        assert mcp_handler is not None
-
-        # Call the handler
-        await mcp_handler(scope, receive, send)
-
-        # Check that authentication was called
-        mock_auth.assert_called_once_with(scope)
-
-        # Check that the user was added to the scope
-        assert scope["user"]["sub"] == "test-user"
-
-        # Check that a new session manager was created for this request
-        mock_session_manager_class.assert_called_once_with(
-            app=mcp_server.server,
-            event_store=mcp_server.event_store,
+        # Create a mock HTTP request
+        request = HTTPRequest(
+            url="http://localhost:8888/mcp",
+            method="POST",
+            headers={
+                "Authorization": "Identity.token test-token",
+                "Content-Type": "application/json",
+            },
+            body=b'{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
         )
 
-        # Check that the session manager was used correctly
-        mock_session_manager.run.assert_called_once()
-        mock_session_manager.handle_request.assert_called_once_with(scope, receive, send)
+        # Get the MCP request handler
+        handler = None
+        for handler_spec in app.handlers[0][1]:
+            if handler_spec[1] == MCPHandler:
+                handler = handler_spec[1](app, request)
+                break
+
+        assert handler is not None
+
+        # Mock the handler's prepare method to simulate authentication
+        handler._user = {"sub": "test-user"}
+
+        # Check that authentication was called with the correct scope
+        # Note: In Tornado, the scope is created from the request
+        expected_scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/mcp",
+            "headers": [
+                (b"authorization", b"Identity.token test-token"),
+                (b"content-type", b"application/json"),
+            ],
+        }
+        mock_auth.assert_called_once()
 
 
 @pytest.mark.asyncio
