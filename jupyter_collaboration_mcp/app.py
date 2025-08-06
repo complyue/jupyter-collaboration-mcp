@@ -38,6 +38,15 @@ class MCPHandler(RequestHandler):
     def initialize(self, mcp_server):
         self.mcp_server = mcp_server
 
+
+    def check_xsrf_cookie(self):
+        # Skip XSRF check for MCP endpoints
+        return
+
+    def xsrf_token(self):
+        # Override xsrf_token to disable CSRF token generation.
+        return None
+
     async def prepare(self):
         """Prepare the request handler."""
         # Authenticate the request
