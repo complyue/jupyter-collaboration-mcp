@@ -7,7 +7,7 @@ through the MCP protocol.
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import mcp.types as types
 from mcp.server.lowlevel import Server
@@ -24,13 +24,13 @@ class NotebookHandlers:
         """Initialize notebook handlers."""
         self.server = server
         self.rtc_adapter = rtc_adapter
+        self.tool_handlers: Dict[str, Callable] = {}
         self._register_handlers()
 
     def _register_handlers(self):
         """Register all notebook-related MCP tools."""
 
-        @self.server.call_tool()
-        async def list_notebooks(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+        async def list_notebooks_handler(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
             """List available notebooks for collaboration."""
             if name != "list_notebooks":
                 raise ValueError(f"Unknown tool: {name}")
@@ -41,7 +41,12 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(notebooks, indent=2))]
 
         @self.server.call_tool()
-        async def get_notebook(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+        async def list_notebooks(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+            return await list_notebooks_handler(name, arguments)
+        
+        self.tool_handlers["list_notebooks"] = list_notebooks_handler
+
+        async def get_notebook_handler(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
             """Get a notebook's content."""
             if name != "get_notebook":
                 raise ValueError(f"Unknown tool: {name}")
@@ -59,7 +64,12 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(notebook, indent=2))]
 
         @self.server.call_tool()
-        async def create_notebook_session(
+        async def get_notebook(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+            return await get_notebook_handler(name, arguments)
+        
+        self.tool_handlers["get_notebook"] = get_notebook_handler
+
+        async def create_notebook_session_handler(
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             """Create or retrieve a collaboration session for a notebook."""
@@ -75,7 +85,14 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(session, indent=2))]
 
         @self.server.call_tool()
-        async def update_notebook_cell(
+        async def create_notebook_session(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
+            return await create_notebook_session_handler(name, arguments)
+        
+        self.tool_handlers["create_notebook_session"] = create_notebook_session_handler
+
+        async def update_notebook_cell_handler(
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             """Update a notebook cell's content."""
@@ -95,7 +112,14 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
         @self.server.call_tool()
-        async def insert_notebook_cell(
+        async def update_notebook_cell(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
+            return await update_notebook_cell_handler(name, arguments)
+        
+        self.tool_handlers["update_notebook_cell"] = update_notebook_cell_handler
+
+        async def insert_notebook_cell_handler(
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             """Insert a new cell into a notebook."""
@@ -115,7 +139,14 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
         @self.server.call_tool()
-        async def delete_notebook_cell(
+        async def insert_notebook_cell(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
+            return await insert_notebook_cell_handler(name, arguments)
+        
+        self.tool_handlers["insert_notebook_cell"] = insert_notebook_cell_handler
+
+        async def delete_notebook_cell_handler(
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             """Delete a cell from a notebook."""
@@ -133,7 +164,14 @@ class NotebookHandlers:
             return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
         @self.server.call_tool()
-        async def execute_notebook_cell(
+        async def delete_notebook_cell(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
+            return await delete_notebook_cell_handler(name, arguments)
+        
+        self.tool_handlers["delete_notebook_cell"] = delete_notebook_cell_handler
+
+        async def execute_notebook_cell_handler(
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             """Execute a notebook cell."""
@@ -151,6 +189,14 @@ class NotebookHandlers:
 
             return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
+        @self.server.call_tool()
+        async def execute_notebook_cell(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
+            return await execute_notebook_cell_handler(name, arguments)
+        
+        self.tool_handlers["execute_notebook_cell"] = execute_notebook_cell_handler
+
 
 class DocumentHandlers:
     """Handlers for document collaboration operations."""
@@ -159,6 +205,7 @@ class DocumentHandlers:
         """Initialize document handlers."""
         self.server = server
         self.rtc_adapter = rtc_adapter
+        self.tool_handlers: Dict[str, Callable] = {}
         self._register_handlers()
 
     def _register_handlers(self):
@@ -342,6 +389,7 @@ class AwarenessHandlers:
         """Initialize awareness handlers."""
         self.server = server
         self.rtc_adapter = rtc_adapter
+        self.tool_handlers: Dict[str, Callable] = {}
         self._register_handlers()
 
     def _register_handlers(self):

@@ -193,12 +193,15 @@ class MCPServerExtension(ExtensionApp):
         if not hasattr(self, "mcp_server"):
             self.mcp_server = MCPServer()
 
+        # Initialize the RTC adapter with the server app
+        if not self.mcp_server.rtc_adapter._initialized:
+            print(f"DEBUG: Initializing RTC adapter with server app", file=sys.stderr)
+            IOLoop.current().add_callback(self.mcp_server.rtc_adapter.initialize, self.serverapp)
+
         # Add the MCP server to the Jupyter server app using a Tornado handler
         self.serverapp.web_app.add_handlers(
             ".*", [(r"/mcp.*", MCPHandler, {"session_manager": self.mcp_server.session_manager, "serverapp": self.serverapp})]
         )
-
-        # RTC adapter initialization will be deferred until first use
 
         self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
 
@@ -211,19 +214,29 @@ class MCPServer:
         self.server = Server("jupyter-collaboration-mcp")
         self.rtc_adapter = RTCAdapter()
         self.event_store = TornadoEventStore()
+        # Set up handlers first to populate tool_handlers
+        self._setup_handlers()
+        
         # Create a single session manager for the entire application
         self.session_manager = TornadoSessionManager(
-            mcp_server=self.server,
+            mcp_server=self,  # Pass self (MCPServer) instead of self.server (MCP Server)
             event_store=self.event_store,
         )
-        self._setup_handlers()
 
     def _setup_handlers(self):
         """Register all MCP tools."""
         # Initialize handlers and store them as instance variables
+        print(f"DEBUG: Setting up handlers, rtc_adapter initialized: {self.rtc_adapter._initialized}", file=sys.stderr)
         self.notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
         self.document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
         self.awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
+        
+        # Collect all tool handlers for direct access
+        self.tool_handlers = {}
+        self.tool_handlers.update(self.notebook_handlers.tool_handlers)
+        self.tool_handlers.update(self.document_handlers.tool_handlers)
+        self.tool_handlers.update(self.awareness_handlers.tool_handlers)
+        print(f"DEBUG: Tool handlers set up: {list(self.tool_handlers.keys())}", file=sys.stderr)
 
     def create_app(self):
         """Create a simple Tornado application with MCP endpoints."""
