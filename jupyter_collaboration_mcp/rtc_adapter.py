@@ -295,7 +295,7 @@ class RTCAdapter:
 
         # Get or create the room
         room = await self.ydoc_extension.get_room(path, file_type)
-        
+
         # Store session information
         self._sessions[session_id] = {
             "id": session_id,
@@ -585,7 +585,7 @@ class RTCAdapter:
             "message": message,
             "last_activity": IOLoop.current().time(),
         }
-        
+
         return {
             "success": True,
             "user_id": user_id,
@@ -729,6 +729,7 @@ class RTCAdapter:
             "session_id": session_id,
             "timestamp": IOLoop.current().time(),
         }
+
     # Helper methods
 
     def _get_file_type(self, path: str) -> str:

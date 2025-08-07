@@ -30,7 +30,9 @@ class NotebookHandlers:
     def _register_handlers(self):
         """Register all notebook-related MCP tools."""
 
-        async def list_notebooks_handler(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+        async def list_notebooks_handler(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
             """List available notebooks for collaboration."""
             if name != "list_notebooks":
                 raise ValueError(f"Unknown tool: {name}")
@@ -43,10 +45,12 @@ class NotebookHandlers:
         @self.server.call_tool()
         async def list_notebooks(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
             return await list_notebooks_handler(name, arguments)
-        
+
         self.tool_handlers["list_notebooks"] = list_notebooks_handler
 
-        async def get_notebook_handler(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
+        async def get_notebook_handler(
+            name: str, arguments: Dict[str, Any]
+        ) -> List[types.ContentBlock]:
             """Get a notebook's content."""
             if name != "get_notebook":
                 raise ValueError(f"Unknown tool: {name}")
@@ -66,7 +70,7 @@ class NotebookHandlers:
         @self.server.call_tool()
         async def get_notebook(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
             return await get_notebook_handler(name, arguments)
-        
+
         self.tool_handlers["get_notebook"] = get_notebook_handler
 
         async def create_notebook_session_handler(
@@ -89,7 +93,7 @@ class NotebookHandlers:
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             return await create_notebook_session_handler(name, arguments)
-        
+
         self.tool_handlers["create_notebook_session"] = create_notebook_session_handler
 
         async def update_notebook_cell_handler(
@@ -116,7 +120,7 @@ class NotebookHandlers:
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             return await update_notebook_cell_handler(name, arguments)
-        
+
         self.tool_handlers["update_notebook_cell"] = update_notebook_cell_handler
 
         async def insert_notebook_cell_handler(
@@ -143,7 +147,7 @@ class NotebookHandlers:
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             return await insert_notebook_cell_handler(name, arguments)
-        
+
         self.tool_handlers["insert_notebook_cell"] = insert_notebook_cell_handler
 
         async def delete_notebook_cell_handler(
@@ -168,7 +172,7 @@ class NotebookHandlers:
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             return await delete_notebook_cell_handler(name, arguments)
-        
+
         self.tool_handlers["delete_notebook_cell"] = delete_notebook_cell_handler
 
         async def execute_notebook_cell_handler(
@@ -194,7 +198,7 @@ class NotebookHandlers:
             name: str, arguments: Dict[str, Any]
         ) -> List[types.ContentBlock]:
             return await execute_notebook_cell_handler(name, arguments)
-        
+
         self.tool_handlers["execute_notebook_cell"] = execute_notebook_cell_handler
 
 

@@ -45,6 +45,7 @@ def create_parser():
 
     return parser
 
+
 def run_standalone_server(host: str, port: int, jupyter_config: str = None):
     """Run the MCP server as a standalone application."""
     logger.info(f"Starting Jupyter Collaboration MCP Server on {host}:{port}")
@@ -56,21 +57,19 @@ def run_standalone_server(host: str, port: int, jupyter_config: str = None):
 
     # Create and configure the MCP server
     mcp_server = MCPServer()
-    
+
     # Initialize the RTC adapter
     IOLoop.current().run_sync(mcp_server.rtc_adapter.initialize, server_app)
 
     # Create Tornado application
-    app = Application([
-        (r"/mcp.*", MCPHandler, {"session_manager": mcp_server.session_manager})
-    ])
+    app = Application([(r"/mcp.*", MCPHandler, {"session_manager": mcp_server.session_manager})])
 
     # Create HTTP server
     server = HTTPServer(app)
     server.listen(port, host)
 
     logger.info(f"MCP Server running at http://{host}:{port}/mcp")
-    
+
     # Start the event loop
     IOLoop.current().start()
 
@@ -85,9 +84,7 @@ def main():
 
     try:
         # Run the server
-        run_standalone_server(
-            host=args.host, port=args.port, jupyter_config=args.jupyter_config
-        )
+        run_standalone_server(host=args.host, port=args.port, jupyter_config=args.jupyter_config)
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
