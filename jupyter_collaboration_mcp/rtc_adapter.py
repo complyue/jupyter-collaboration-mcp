@@ -52,16 +52,15 @@ class RTCAdapter:
                         f"json:notebook:{notebook_path}"
                     )
 
-                    notebooks.append(
-                        {
-                            "path": notebook_path,
-                            "name": contents_item["name"],
-                            "collaborative": collaborators > 0,
-                            "last_modified": contents_item["last_modified"],
-                            "collaborators": max(0, collaborators),
-                            "size": contents_item.get("size", 0),
-                        }
-                    )
+                    notebook_info = {
+                        "path": notebook_path,
+                        "name": contents_item["name"],
+                        "collaborative": collaborators > 0,
+                        "last_modified": contents_item["last_modified"],
+                        "collaborators": max(0, collaborators),
+                        "size": contents_item.get("size", 0),
+                    }
+                    notebooks.append(notebook_info)
 
                 # Process directories recursively
                 if contents_item["type"] == "directory":
@@ -70,17 +69,18 @@ class RTCAdapter:
                         dir_contents = await contents_manager.get(dir_path, content=True)
                         if "content" in dir_contents:
                             for item in dir_contents["content"]:
-                                process_contents(item, dir_path)
+                                await process_contents(item, dir_path)
                     except Exception as e:
                         logger.warning(f"Error listing contents of {dir_path}: {e}")
 
             # Process all contents
             if "content" in contents:
                 for item in contents["content"]:
-                    process_contents(item)
+                    await process_contents(item)
 
             # Apply filters and sort
-            return self._filter_and_sort_items(notebooks, path_filter)
+            filtered_notebooks = self._filter_and_sort_items(notebooks, path_filter)
+            return filtered_notebooks
 
         except Exception as e:
             logger.error(f"Error listing notebooks: {e}")
@@ -253,14 +253,14 @@ class RTCAdapter:
                         dir_contents = await contents_manager.get(dir_path, content=True)
                         if "content" in dir_contents:
                             for item in dir_contents["content"]:
-                                process_contents(item, dir_path)
+                                await process_contents(item, dir_path)
                     except Exception as e:
                         logger.warning(f"Error listing contents of {dir_path}: {e}")
 
             # Process all contents
             if "content" in contents:
                 for item in contents["content"]:
-                    process_contents(item)
+                    await process_contents(item)
 
             # Apply filters and sort
             documents = self._filter_and_sort_items(documents, path_filter)

@@ -107,7 +107,6 @@ class TornadoEventStore:
         metadata["last_activity"] = event_entry.timestamp
         metadata["event_count"] += 1
 
-        logger.debug(f"Stored event {event_id} for stream {stream_id}")
         return event_id
 
     async def get_event(self, event_id: str) -> Optional[TornadoEventMessage]:
