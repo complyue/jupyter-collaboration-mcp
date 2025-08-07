@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="jupyter-collaboration-mcp",
@@ -10,11 +10,7 @@ setup(
         "jupyter-server>=2.0.0",
         "jupyter-collaboration>=2.0.0",
         "mcp>=1.0.0",
-        "starlette>=0.27.0",
-        "uvicorn>=0.23.0",
         "pydantic>=2.0.0",
-        "anyio>=4.0.0",
-        "pyjwt>=2.8.0",
     ],
     extras_require={
         "dev": [
@@ -45,11 +41,11 @@ setup(
         "Source": "https://github.com/jupyter/jupyter-collaboration-mcp",
         "Tracker": "https://github.com/jupyter/jupyter-collaboration-mcp/issues",
     },
-    license="BSD-3-Clause",
+    license="MIT",
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: BSD License",
+        "Intended Audience :: Data Scientists",
+        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

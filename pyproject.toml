@@ -3,15 +3,13 @@ name = "jupyter-collaboration-mcp"
 version = "0.1.0"
 description = "MCP server for Jupyter Collaboration features"
 readme = "DESIGN.md"
-license = {text = "BSD-3-Clause"}
-authors = [
-    {name = "Jupyter Collaboration Team"}
-]
-keywords = ["jupyter", "collaboration", "mcp", "ai"]
+license = { text = "MIT" }
+authors = [{ name = "Jupyter Collaboration Team" }]
+keywords = ["jupyter", "realtime", "collaboration", "mcp", "ai", "agentic"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
+    "Intended Audience :: Data Scientists",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
