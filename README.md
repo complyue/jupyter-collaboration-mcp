@@ -93,6 +93,46 @@ For MCP clients, you'll need to configure the server URL and authentication toke
 - If running as a Jupyter server extension, the MCP endpoint is typically at `http://localhost:8888/mcp` (or whatever port your Jupyter server is running on)
 - If running as a standalone server, the endpoint is at the host and port you specified when starting the server (e.g., `http://localhost:8000/mcp`)
 
+## Provided MCP Tools
+
+The server exposes the following MCP tools:
+
+### Notebook Operations
+
+- `list_notebooks`: List available notebooks
+- `get_notebook`: Get notebook content
+- `create_notebook_session`: Create or retrieve a collaboration session
+- `update_notebook_cell`: Update a notebook cell
+- `insert_notebook_cell`: Insert a new cell
+- `delete_notebook_cell`: Delete a cell
+- `execute_notebook_cell`: Execute a cell
+
+### Document Operations
+
+- `list_documents`: List available documents
+- `get_document`: Get document content
+- `create_document_session`: Create or retrieve a collaboration session
+- `update_document`: Update document content
+- `insert_text`: Insert text at a position
+- `delete_text`: Delete text from a position
+- `get_document_history`: Get document version history
+- `restore_document_version`: Restore a document to a previous version
+- `fork_document`: Create a fork of a document
+- `merge_document_fork`: Merge a fork back into the original
+
+### Awareness Operations
+
+- `get_online_users`: Get list of online users
+- `get_user_presence`: Get user presence information
+- `set_user_presence`: Set current user's presence status
+- `get_user_cursors`: Get cursor positions in a document
+- `update_cursor_position`: Update current user's cursor position
+- `get_user_activity`: Get recent user activities
+- `broadcast_user_activity`: Broadcast user activity
+- `get_active_sessions`: Get active collaboration sessions
+- `join_session`: Join a collaboration session
+- `leave_session`: Leave a collaboration session
+
 ## Development Setup
 
 ### Prerequisites
@@ -149,46 +189,6 @@ The project uses mypy for type checking:
 ```bash
 mypy jupyter_collaboration_mcp
 ```
-
-## MCP Tools
-
-The server exposes the following MCP tools:
-
-### Notebook Operations
-
-- `list_notebooks`: List available notebooks
-- `get_notebook`: Get notebook content
-- `create_notebook_session`: Create or retrieve a collaboration session
-- `update_notebook_cell`: Update a notebook cell
-- `insert_notebook_cell`: Insert a new cell
-- `delete_notebook_cell`: Delete a cell
-- `execute_notebook_cell`: Execute a cell
-
-### Document Operations
-
-- `list_documents`: List available documents
-- `get_document`: Get document content
-- `create_document_session`: Create or retrieve a collaboration session
-- `update_document`: Update document content
-- `insert_text`: Insert text at a position
-- `delete_text`: Delete text from a position
-- `get_document_history`: Get document version history
-- `restore_document_version`: Restore a document to a previous version
-- `fork_document`: Create a fork of a document
-- `merge_document_fork`: Merge a fork back into the original
-
-### Awareness Operations
-
-- `get_online_users`: Get list of online users
-- `get_user_presence`: Get user presence information
-- `set_user_presence`: Set current user's presence status
-- `get_user_cursors`: Get cursor positions in a document
-- `update_cursor_position`: Update current user's cursor position
-- `get_user_activity`: Get recent user activities
-- `broadcast_user_activity`: Broadcast user activity
-- `get_active_sessions`: Get active collaboration sessions
-- `join_session`: Join a collaboration session
-- `leave_session`: Leave a collaboration session
 
 ## Troubleshooting
 
