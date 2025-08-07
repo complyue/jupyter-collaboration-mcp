@@ -90,8 +90,7 @@ For MCP clients, you'll need to configure the server URL and authentication toke
 
 ### Finding Your Server URL
 
-- If running as a Jupyter server extension, the MCP endpoint is typically at `http://localhost:8888/mcp` (or whatever port your Jupyter server is running on)
-- If running as a standalone server, the endpoint is at the host and port you specified when starting the server (e.g., `http://localhost:8000/mcp`)
+- When running as a Jupyter server extension, the MCP endpoint is typically at `http://localhost:8888/mcp` (or whatever port your Jupyter server is running on)
 
 ## Provided MCP Tools
 

@@ -75,7 +75,6 @@ jupyter-collaboration-mcp/
 ├── setup.py
 ├── jupyter_collaboration_mcp/
 │   ├── __init__.py
-│   ├── __main__.py
 │   ├── app.py              # Main MCP server application
 │   ├── handlers.py         # MCP request handlers
 │   ├── rtc_adapter.py      # Adapter to existing RTC functionality
@@ -805,7 +804,6 @@ jupyter-collaboration-mcp/
 ├── setup.py
 ├── jupyter_collaboration_mcp/
 │   ├── __init__.py
-│   ├── __main__.py
 │   ├── app.py              # Main MCP server application
 │   ├── tools.py           # MCP tool definitions using FastMCP
 │   ├── rtc_adapter.py      # Adapter to existing RTC functionality
@@ -952,7 +950,7 @@ The MCP server is packaged as a standard Python package using pyproject.toml for
 - Authentication and event store components
 - Test suite and documentation
 
-The package is distributed via PyPI and can be installed using pip. It includes entry points for both standalone execution and Jupyter server extension integration.
+The package is distributed via PyPI and can be installed using pip. It includes entry points for Jupyter server extension integration.
 
 #### 6.2 Jupyter Server Extension Integration
 

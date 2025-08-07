@@ -23,7 +23,6 @@ jupyter-collaboration-mcp/
 ├── setup.py
 ├── jupyter_collaboration_mcp/
 │   ├── __init__.py
-│   ├── __main__.py
 │   ├── app.py              # Main MCP server application
 │   ├── handlers.py         # MCP request handlers
 │   ├── rtc_adapter.py      # Adapter to existing RTC functionality
@@ -132,19 +131,10 @@ The server exposes the following MCP tools for user awareness:
 
 ### Running in Development Mode
 
-#### As a Jupyter Server Extension
+Start Jupyter server with the extension and a token. The extension is automatically loaded when installed:
 
 ```bash
-# Start Jupyter server with the extension and a token
-# The extension is automatically loaded when installed
 jupyter lab --IdentityProvider.token=dev-token
-```
-
-#### As a Standalone Server
-
-```bash
-# Run the MCP server in development mode
-python -m jupyter_collaboration_mcp --host 127.0.0.1 --port 8000 --log-level DEBUG
 ```
 
 ## Authentication
