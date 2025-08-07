@@ -5,13 +5,11 @@ This module implements the core MCP server that exposes Jupyter Collaboration's
 real-time collaboration (RTC) functionalities to AI agents.
 """
 
-import json
 import logging
-import sys
 from typing import Any, Dict, Optional
 
-import mcp.types as types
 from jupyter_server.extension.application import ExtensionApp
+from jupyter_server_ydoc.app import YDocExtension
 from mcp.server import FastMCP
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -140,25 +138,9 @@ class MCPServerExtension(ExtensionApp):
     app_name = "Jupyter Collaboration MCP"
     description = "MCP server for Jupyter Collaboration features"
 
-    def initialize(self):
-        """Initialize the extension."""
-        super().initialize()
-
-        # Configure authentication with token from Jupyter's command line
-        token = getattr(self.serverapp.identity_provider, "token", None)
-        if token:
-            configure_auth_with_token(token)
-            self.log.info(f"Configured authentication with token from command line")
-        else:
-            self.log.warning(
-                "No token found in Jupyter configuration, using default authentication"
-            )
-
-        self.log.info("Jupyter Collaboration MCP Server extension initialized")
-
     def stop_extension(self):
         """Stop the extension and clean up resources."""
-        if hasattr(self, "fastmcp"):
+        if hasattr(self, "session_manager"):
             self.log.info("Stopping MCP server")
             # Clean up sessions
             IOLoop.current().add_callback(self._cleanup_sessions)
@@ -174,37 +156,64 @@ class MCPServerExtension(ExtensionApp):
             self.log.error(f"Error cleaning up sessions: {e}", exc_info=True)
 
     def initialize_handlers(self):
-        """Initialize the handlers for the extension."""
+        # Configure authentication with token from Jupyter's command line
+        token = getattr(self.serverapp.identity_provider, "token", None)
+        if token:
+            configure_auth_with_token(token)
+            self.log.info("Configured authentication with token from command line")
+        else:
+            self.log.warning(
+                "No token found in Jupyter configuration, using default authentication"
+            )
 
-        event_store = TornadoEventStore()
-
-        rtc_adapter = RTCAdapter()
-        logger.info(f"DEBUG: Initializing RTC adapter with server app")
-        IOLoop.current().add_callback(rtc_adapter.initialize, self.serverapp)
-
-        fastmcp = FastMCP("jupyter-collaboration-mcp")
-
-        define_notebook_tools(fastmcp, rtc_adapter)
-        define_document_tools(fastmcp, rtc_adapter)
-        define_awareness_tools(fastmcp, rtc_adapter)
-
-        session_manager = TornadoSessionManager(fastmcp, event_store)
-
-        # Add the MCP server to the Jupyter server app using a Tornado handler
-        self.serverapp.web_app.add_handlers(
-            ".*",
-            [
-                (
-                    r"/mcp.*",
-                    MCPHandler,
-                    {
-                        "session_manager": session_manager,
-                        "serverapp": self.serverapp,
-                    },
+        async def try_register_mcp_handlers():
+            extension_apps = self.serverapp.extension_manager.extension_apps
+            ydoc_extension = None
+            for name, apps in extension_apps.items():
+                self.log.debug(f"Checking extension package: {name}")
+                for app in apps:
+                    self.log.debug(
+                        f"Checking extension app: {type(app).__name__}, module: {type(app).__module__}"
+                    )
+                    if isinstance(app, YDocExtension):
+                        ydoc_extension = app
+                        break
+            if not ydoc_extension:
+                self.log.info(
+                    "Jupyter Collaboration MCP Server extension waiting YDocExtension to be loaded..."
                 )
-            ],
-        )
+                await gen.sleep(3)
+                IOLoop.current().add_callback(try_register_mcp_handlers)
+                return
+            self.log.info(f"Found YDocExtension app, initializing MCP handlers...")
 
-        self.session_manager = session_manager
+            rtc_adapter = RTCAdapter(self.serverapp, ydoc_extension)
 
-        self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
+            event_store = TornadoEventStore()
+            fastmcp = FastMCP("jupyter-collaboration-mcp")
+
+            define_notebook_tools(fastmcp, rtc_adapter)
+            define_document_tools(fastmcp, rtc_adapter)
+            define_awareness_tools(fastmcp, rtc_adapter)
+
+            # Create session manager
+            self.session_manager = TornadoSessionManager(fastmcp, event_store)
+
+            # Add the MCP server to the Jupyter server app using a Tornado handler
+            self.serverapp.web_app.add_handlers(
+                ".*",
+                [
+                    (
+                        r"/mcp.*",
+                        MCPHandler,
+                        {
+                            "session_manager": self.session_manager,
+                            "serverapp": self.serverapp,
+                        },
+                    )
+                ],
+            )
+
+            self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
+
+        IOLoop.current().add_callback(try_register_mcp_handlers)

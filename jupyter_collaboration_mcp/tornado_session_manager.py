@@ -205,11 +205,11 @@ class TornadoSessionManager:
             logger.debug(
                 f"DEBUG: Creating JSONRPCError with id: {error_id} (type: {type(error_id)})"
             )
-            logger.debug(f"DEBUG: request_data in error handler: {request_data}")
+            logger.debug(f"request_data in error handler: {request_data}")
 
             # Check if this is a notification (no id field) - notifications don't get error responses
             if error_id is None:
-                logger.debug(f"DEBUG: Error occurred for notification - no error response needed")
+                logger.debug(f"Error occurred for notification - no error response needed")
                 if self.json_response or not self._sse_handlers.get(session_id):
                     request_handler.finish("{}")  # Return empty JSON for notifications
                 else:
@@ -356,74 +356,74 @@ class TornadoSessionManager:
         logger.debug(
             f"DEBUG: Creating JSONRPCResponse for tool call with id: {tool_call_id} (type: {type(tool_call_id)})"
         )
-        logger.debug(f"DEBUG: request_data in tool call handler: {request_data}")
+        logger.debug(f"request_data in tool call handler: {request_data}")
         # Check if this is a notification (no id field) - notifications don't get responses
         if tool_call_id is None:
-            logger.debug(f"DEBUG: Received tool call notification - no response needed")
+            logger.debug(f"Received tool call notification - no response needed")
             return {}  # Return empty dict for notifications
 
         logger.debug(
             f"DEBUG: Creating JSONRPCResponse for tool call with id: {tool_call_id} (type: {type(tool_call_id)})"
         )
-        logger.debug(f"DEBUG: request_data in tool call handler: {request_data}")
-        logger.debug(f"DEBUG: result type: {type(result)}")
-        logger.debug(f"DEBUG: result value: {result}")
-        logger.debug(f"DEBUG: hasattr(result, 'model_dump'): {hasattr(result, 'model_dump')}")
+        logger.debug(f"request_data in tool call handler: {request_data}")
+        logger.debug(f"result type: {type(result)}")
+        logger.debug(f"result value: {result}")
+        logger.debug(f"hasattr(result, 'model_dump'): {hasattr(result, 'model_dump')}")
 
         # Handle FastMCP result format properly
-        logger.debug(f"DEBUG: Checking if result has model_dump attribute")
+        logger.debug(f"Checking if result has model_dump attribute")
         if hasattr(result, "model_dump"):
-            logger.debug(f"DEBUG: result has model_dump, calling it")
+            logger.debug(f"result has model_dump, calling it")
             model_dump_result = result.model_dump(by_alias=True, mode="json", exclude_none=True)
-            logger.debug(f"DEBUG: model_dump_result type: {type(model_dump_result)}")
-            logger.debug(f"DEBUG: model_dump_result value: {model_dump_result}")
+            logger.debug(f"model_dump_result type: {type(model_dump_result)}")
+            logger.debug(f"model_dump_result value: {model_dump_result}")
 
             # FastMCP returns a tuple of (content, metadata) for some tools
             # We need to extract the actual content for the JSONRPCResponse
             if isinstance(model_dump_result, tuple) and len(model_dump_result) > 0:
-                logger.debug(f"DEBUG: model_dump_result is a tuple, extracting content")
+                logger.debug(f"model_dump_result is a tuple, extracting content")
                 # If the first element is a list with content items, use that
                 if isinstance(model_dump_result[0], list):
-                    logger.debug(f"DEBUG: Using first element of tuple as content")
+                    logger.debug(f"Using first element of tuple as content")
                     response_content = {"content": model_dump_result[0]}
                 else:
-                    logger.debug(f"DEBUG: Using entire tuple as content")
+                    logger.debug(f"Using entire tuple as content")
                     response_content = {"content": list(model_dump_result)}
             else:
-                logger.debug(f"DEBUG: model_dump_result is not a tuple, using as-is")
+                logger.debug(f"model_dump_result is not a tuple, using as-is")
                 response_content = model_dump_result
         else:
-            logger.debug(f"DEBUG: result doesn't have model_dump, checking if it's a tuple")
+            logger.debug(f"result doesn't have model_dump, checking if it's a tuple")
             # Check if the result itself is a tuple (which seems to be the case based on logs)
             if isinstance(result, tuple) and len(result) > 0:
-                logger.debug(f"DEBUG: result is a tuple with {len(result)} elements")
-                logger.debug(f"DEBUG: result[0] type: {type(result[0])}")
-                logger.debug(f"DEBUG: result[0] value: {result[0]}")
-                logger.debug(f"DEBUG: result[1] type: {type(result[1])}")
-                logger.debug(f"DEBUG: result[1] value: {result[1]}")
+                logger.debug(f"result is a tuple with {len(result)} elements")
+                logger.debug(f"result[0] type: {type(result[0])}")
+                logger.debug(f"result[0] value: {result[0]}")
+                logger.debug(f"result[1] type: {type(result[1])}")
+                logger.debug(f"result[1] value: {result[1]}")
 
                 # Based on the logs, result[1] contains the actual data we want
                 if len(result) > 1 and isinstance(result[1], dict):
-                    logger.debug(f"DEBUG: Using second element of tuple as response content")
+                    logger.debug(f"Using second element of tuple as response content")
                     # Check if the dictionary has a 'result' key (which contains the actual data)
                     if "result" in result[1]:
-                        logger.debug(f"DEBUG: Extracting data from 'result' key in second element")
+                        logger.debug(f"Extracting data from 'result' key in second element")
                         # MCP protocol expects the response to have a 'content' field
                         # The content should be a list of TextContent objects
                         response_content = {
                             "content": result[0]  # Use the TextContent list from the first element
                         }
                     else:
-                        logger.debug(f"DEBUG: Using entire second element as response content")
+                        logger.debug(f"Using entire second element as response content")
                         # Still structure it properly for MCP protocol
                         response_content = {
                             "content": result[0]  # Use the TextContent list from the first element
                         }
                 else:
-                    logger.debug(f"DEBUG: Using first element of tuple as response content")
+                    logger.debug(f"Using first element of tuple as response content")
                     response_content = {"content": result[0]}
             else:
-                logger.debug(f"DEBUG: result is not a tuple, using as-is")
+                logger.debug(f"result is not a tuple, using as-is")
                 response_content = result
 
         response = JSONRPCResponse(
@@ -450,9 +450,9 @@ class TornadoSessionManager:
         request_id = request_data.get("id")
 
         # DEBUG: Log the request data and id to diagnose the issue
-        logger.debug(f"DEBUG: _handle_mcp_message called with request_data: {request_data}")
-        logger.debug(f"DEBUG: request_id extracted: {request_id} (type: {type(request_id)})")
-        logger.debug(f"DEBUG: 'id' key exists in request_data: {'id' in request_data}")
+        logger.debug(f"_handle_mcp_message called with request_data: {request_data}")
+        logger.debug(f"request_id extracted: {request_id} (type: {type(request_id)})")
+        logger.debug(f"'id' key exists in request_data: {'id' in request_data}")
 
         # Store event if event store is available
         if self.event_store:
@@ -507,7 +507,7 @@ class TornadoSessionManager:
         # For other methods, just return a basic response
         # Check if this is a notification (no id field) - notifications don't get responses
         if request_id is None:
-            logger.debug(f"DEBUG: Received notification '{method}' - no response needed")
+            logger.debug(f"Received notification '{method}' - no response needed")
             return {}  # Return empty dict for notifications
 
         logger.debug(

@@ -21,65 +21,75 @@ logger = logging.getLogger(__name__)
 class RTCAdapter:
     """Adapter between MCP requests and Jupyter Collaboration functionality."""
 
-    def __init__(self):
-        """Initialize the RTC adapter."""
-        self.ydoc_extension: Optional[YDocExtension] = None
-        self._initialized = False
+    def __init__(self, server_app, ydoc_extension):
+        self._server_app = server_app
+        self.ydoc_extension = ydoc_extension
+
         self._sessions: Dict[str, Dict[str, Any]] = {}
         self._user_presence: Dict[str, Dict[str, Any]] = {}
         self._document_forks: Dict[str, Dict[str, Any]] = {}
 
-    async def initialize(self, server_app):
-        """Initialize the adapter with the Jupyter server application."""
-        if self._initialized:
-            return
-
-        # Get the YDocExtension from the server app
-        if hasattr(server_app, "extension_manager"):
-            for extension in server_app.extension_manager.extensions:
-                if isinstance(extension, YDocExtension):
-                    self.ydoc_extension = extension
-                    break
-
-        if not self.ydoc_extension:
-            logger.warning("YDocExtension not found, RTC functionality will be limited")
-            # Create a minimal mock for development/testing
-            self.ydoc_extension = MockYDocExtension()
-
-        self._initialized = True
-        logger.info("RTC adapter initialized")
+        logger.info("RTC adapter initialized successfully")
 
     # Notebook operations
 
     async def list_notebooks(self, path_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available notebooks for collaboration."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # Get the contents manager from the server app
+            contents_manager = self._server_app.contents_manager
+            contents = await contents_manager.get("", content=True)
+            notebooks = []
 
-        # In a real implementation, this would query the file system
-        # and collaboration state
-        notebooks = [
-            {
-                "path": "/example.ipynb",
-                "name": "Example Notebook",
-                "collaborative": True,
-                "last_modified": "2023-01-01T00:00:00Z",
-                "collaborators": 2,
-            }
-        ]
+            async def process_contents(contents_item, path=""):
+                if contents_item["type"] == "notebook":
+                    notebook_path = (
+                        f"{path}/{contents_item['name']}" if path else contents_item["name"]
+                    )
 
-        if path_filter:
-            notebooks = [n for n in notebooks if path_filter in n["path"]]
+                    # Check if there's an active collaboration session for this notebook
+                    collaborators = await self._get_collaborator_count(
+                        f"json:notebook:{notebook_path}"
+                    )
 
-        return notebooks
+                    notebooks.append(
+                        {
+                            "path": notebook_path,
+                            "name": contents_item["name"],
+                            "collaborative": collaborators > 0,
+                            "last_modified": contents_item["last_modified"],
+                            "collaborators": max(0, collaborators),
+                            "size": contents_item.get("size", 0),
+                        }
+                    )
+
+                # Process directories recursively
+                if contents_item["type"] == "directory":
+                    dir_path = f"{path}/{contents_item['name']}" if path else contents_item["name"]
+                    try:
+                        dir_contents = await contents_manager.get(dir_path, content=True)
+                        if "content" in dir_contents:
+                            for item in dir_contents["content"]:
+                                process_contents(item, dir_path)
+                    except Exception as e:
+                        logger.warning(f"Error listing contents of {dir_path}: {e}")
+
+            # Process all contents
+            if "content" in contents:
+                for item in contents["content"]:
+                    process_contents(item)
+
+            # Apply filters and sort
+            return self._filter_and_sort_items(notebooks, path_filter)
+
+        except Exception as e:
+            logger.error(f"Error listing notebooks: {e}")
+            return []
 
     async def get_notebook(
         self, path: str, include_collaboration_state: bool = True
     ) -> Optional[Dict[str, Any]]:
         """Get a notebook's content."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             # Get the document room for this notebook
             room = await self.ydoc_extension.get_room(path, "notebook")
@@ -101,9 +111,6 @@ class RTCAdapter:
 
     async def create_notebook_session(self, path: str) -> Dict[str, Any]:
         """Create or retrieve a collaboration session for a notebook."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         session_id = str(uuid.uuid4())
         room_id = f"notebook:{path}"
 
@@ -125,9 +132,6 @@ class RTCAdapter:
         self, path: str, cell_id: str, content: str, cell_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """Update a notebook cell's content."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
             if not room:
@@ -148,9 +152,6 @@ class RTCAdapter:
         self, path: str, content: str, position: int, cell_type: str = "code"
     ) -> Dict[str, Any]:
         """Insert a new cell into a notebook."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
             if not room:
@@ -170,9 +171,6 @@ class RTCAdapter:
 
     async def delete_notebook_cell(self, path: str, cell_id: str) -> Dict[str, Any]:
         """Delete a cell from a notebook."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
             if not room:
@@ -193,9 +191,6 @@ class RTCAdapter:
         self, path: str, cell_id: str, timeout: int = 30
     ) -> Dict[str, Any]:
         """Execute a notebook cell."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
             if not room:
@@ -219,45 +214,71 @@ class RTCAdapter:
         self, path_filter: Optional[str] = None, file_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """List available documents for collaboration."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # Get the contents manager from the server app
+            contents_manager = self._server_app.contents_manager
+            contents = await contents_manager.get("", content=True)
+            documents = []
 
-        # In a real implementation, this would query the file system
-        # and collaboration state
-        documents = [
-            {
-                "path": "/example.md",
-                "name": "Example Document",
-                "file_type": "markdown",
-                "collaborative": True,
-                "last_modified": "2023-01-01T00:00:00Z",
-                "collaborators": 1,
-            },
-            {
-                "path": "/example.txt",
-                "name": "Example Text File",
-                "file_type": "text",
-                "collaborative": True,
-                "last_modified": "2023-01-01T00:00:00Z",
-                "collaborators": 0,
-            },
-        ]
+            async def process_contents(contents_item, path=""):
+                if contents_item["type"] == "file":
+                    file_path = f"{path}/{contents_item['name']}" if path else contents_item["name"]
 
-        if path_filter:
-            documents = [d for d in documents if path_filter in d["path"]]
+                    # Skip notebooks (they're handled by list_notebooks)
+                    if file_path.endswith(".ipynb"):
+                        return
 
-        if file_type:
-            documents = [d for d in documents if d["file_type"] == file_type]
+                    # Determine file type and check collaboration
+                    doc_file_type = self._get_file_type(file_path)
+                    collaborators = await self._get_collaborator_count(
+                        f"json:{doc_file_type}:{file_path}"
+                    )
 
-        return documents
+                    documents.append(
+                        {
+                            "path": file_path,
+                            "name": contents_item["name"],
+                            "file_type": doc_file_type,
+                            "collaborative": collaborators > 0,
+                            "last_modified": contents_item["last_modified"],
+                            "collaborators": max(0, collaborators),
+                            "size": contents_item.get("size", 0),
+                        }
+                    )
+
+                # Process directories recursively
+                if contents_item["type"] == "directory":
+                    dir_path = f"{path}/{contents_item['name']}" if path else contents_item["name"]
+                    try:
+                        dir_contents = await contents_manager.get(dir_path, content=True)
+                        if "content" in dir_contents:
+                            for item in dir_contents["content"]:
+                                process_contents(item, dir_path)
+                    except Exception as e:
+                        logger.warning(f"Error listing contents of {dir_path}: {e}")
+
+            # Process all contents
+            if "content" in contents:
+                for item in contents["content"]:
+                    process_contents(item)
+
+            # Apply filters and sort
+            documents = self._filter_and_sort_items(documents, path_filter)
+
+            # Apply file type filter if provided
+            if file_type:
+                documents = [d for d in documents if d["file_type"] == file_type]
+
+            return documents
+
+        except Exception as e:
+            logger.error(f"Error listing documents: {e}")
+            return []
 
     async def get_document(
         self, path: str, include_collaboration_state: bool = True
     ) -> Optional[Dict[str, Any]]:
         """Get a document's content."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             # Determine file type from path
             file_type = self._get_file_type(path)
@@ -284,9 +305,6 @@ class RTCAdapter:
         self, path: str, file_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create or retrieve a collaboration session for a document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         if not file_type:
             file_type = self._get_file_type(path)
 
@@ -318,9 +336,6 @@ class RTCAdapter:
         self, path: str, content: str, position: int = -1, length: int = 0
     ) -> Dict[str, Any]:
         """Update a document's content."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -341,9 +356,6 @@ class RTCAdapter:
 
     async def insert_text(self, path: str, text: str, position: int) -> Dict[str, Any]:
         """Insert text into a document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -364,9 +376,6 @@ class RTCAdapter:
 
     async def delete_text(self, path: str, position: int, length: int) -> Dict[str, Any]:
         """Delete text from a document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -388,9 +397,6 @@ class RTCAdapter:
 
     async def get_document_history(self, path: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get a document's version history."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -407,9 +413,6 @@ class RTCAdapter:
 
     async def restore_document_version(self, path: str, version_id: str) -> Dict[str, Any]:
         """Restore a document to a previous version."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -436,9 +439,6 @@ class RTCAdapter:
         synchronize: bool = False,
     ) -> Dict[str, Any]:
         """Create a fork of a document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             file_type = self._get_file_type(path)
             room = await self.ydoc_extension.get_room(path, file_type)
@@ -478,9 +478,6 @@ class RTCAdapter:
 
     async def merge_document_fork(self, path: str, fork_id: str) -> Dict[str, Any]:
         """Merge a fork back into the original document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         try:
             if fork_id not in self._document_forks:
                 raise ValueError(f"Fork not found: {fork_id}")
@@ -522,90 +519,154 @@ class RTCAdapter:
 
     async def get_online_users(self, document_path: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get a list of users currently online."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # Query the awareness system for online users
+            users = []
 
-        # In a real implementation, this would query the presence system
-        users = [
-            {
-                "id": "user1",
-                "name": "User 1",
-                "status": "online",
-                "last_activity": IOLoop.current().time(),
-                "current_document": "/example.ipynb",
-            },
-            {
-                "id": "user2",
-                "name": "User 2",
-                "status": "away",
-                "last_activity": IOLoop.current().time() - 300,
-                "current_document": "/example.md",
-            },
-        ]
+            if hasattr(self.ydoc_extension, "ywebsocket_server"):
+                # Get all rooms to check for active users
+                try:
+                    # This is a simplified implementation - in a real scenario,
+                    # we would query the awareness system more directly
+                    if document_path:
+                        room_id = f"json:notebook:{document_path}"
+                        if not document_path.endswith(".ipynb"):
+                            file_type = self._get_file_type(document_path)
+                            room_id = f"json:{file_type}:{document_path}"
 
-        if document_path:
-            users = [u for u in users if u.get("current_document") == document_path]
+                        room = await self.ydoc_extension.ywebsocket_server.get_room(room_id)
+                        if room and hasattr(room, "awareness"):
+                            for client_id, state in room.awareness.states.items():
+                                users.append(
+                                    {
+                                        "id": str(client_id),
+                                        "name": state.get("user", {}).get(
+                                            "name", f"User {client_id}"
+                                        ),
+                                        "status": "online",
+                                        "last_activity": IOLoop.current().time(),
+                                        "current_document": document_path,
+                                    }
+                                )
+                    else:
+                        # Return a generic response for now
+                        # In a real implementation, we would aggregate across all rooms
+                        users = [
+                            {
+                                "id": "user1",
+                                "name": "User 1",
+                                "status": "online",
+                                "last_activity": IOLoop.current().time(),
+                                "current_document": "/example.ipynb",
+                            }
+                        ]
+                except Exception as e:
+                    logger.warning(f"Error querying awareness system: {e}")
+                    # Fallback to empty list
+                    users = []
 
-        return users
+            return users
+        except Exception as e:
+            logger.error(f"Error getting online users: {e}")
+            return []
 
     async def get_user_presence(
         self, user_id: str, document_path: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get presence information for a specific user."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # Check cached presence first
+            if user_id in self._user_presence:
+                presence = self._user_presence[user_id]
+                if document_path and presence.get("current_document") != document_path:
+                    return {"error": "User not present in specified document"}
+                return presence
 
-        # Check cached presence
-        if user_id in self._user_presence:
-            presence = self._user_presence[user_id]
-            if document_path and presence.get("current_document") != document_path:
-                return {"error": "User not present in specified document"}
-            return presence
-
-        # Return default presence
-        return {
-            "user_id": user_id,
-            "status": "offline",
-            "last_activity": 0,
-            "current_document": None,
-        }
+            # Query the awareness system for user presence
+            if hasattr(self.ydoc_extension, "ywebsocket_server"):
+                # In a real implementation, we would query the awareness system directly
+                # For now, return a default presence
+                return {
+                    "user_id": user_id,
+                    "status": "offline",
+                    "last_activity": 0,
+                    "current_document": None,
+                }
+            else:
+                return {
+                    "user_id": user_id,
+                    "status": "offline",
+                    "last_activity": 0,
+                    "current_document": None,
+                }
+        except Exception as e:
+            logger.error(f"Error getting user presence: {e}")
+            return {
+                "user_id": user_id,
+                "status": "offline",
+                "last_activity": 0,
+                "current_document": None,
+            }
 
     async def set_user_presence(
         self, status: str = "online", message: Optional[str] = None
     ) -> Dict[str, Any]:
         """Set the current user's presence status."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # In a real implementation, this would update the presence system
+            user_id = "current_user"  # Would get from authenticated context
+            self._user_presence[user_id] = {
+                "user_id": user_id,
+                "status": status,
+                "message": message,
+                "last_activity": IOLoop.current().time(),
+            }
 
-        # In a real implementation, this would update the presence system
-        user_id = "current_user"  # Would get from authenticated context
-        self._user_presence[user_id] = {
-            "user_id": user_id,
-            "status": status,
-            "message": message,
-            "last_activity": IOLoop.current().time(),
-        }
-
-        return {
-            "success": True,
-            "user_id": user_id,
-            "status": status,
-            "timestamp": IOLoop.current().time(),
-        }
+            return {
+                "success": True,
+                "user_id": user_id,
+                "status": status,
+                "timestamp": IOLoop.current().time(),
+            }
+        except Exception as e:
+            logger.error(f"Error setting user presence: {e}")
+            return {"success": False, "error": str(e)}
 
     async def get_user_cursors(self, document_path: str) -> List[Dict[str, Any]]:
         """Get cursor positions of users in a document."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # Query the awareness system for cursor positions
+            cursors = []
 
-        # In a real implementation, this would query the awareness system
-        return [
-            {
-                "user_id": "user1",
-                "position": {"line": 5, "column": 10},
-                "selection": {"start": {"line": 5, "column": 5}, "end": {"line": 5, "column": 15}},
-            }
-        ]
+            if hasattr(self.ydoc_extension, "ywebsocket_server"):
+                # Determine room ID based on document type
+                room_id = f"json:notebook:{document_path}"
+                if not document_path.endswith(".ipynb"):
+                    file_type = self._get_file_type(document_path)
+                    room_id = f"json:{file_type}:{document_path}"
+
+                try:
+                    room = await self.ydoc_extension.ywebsocket_server.get_room(room_id)
+                    if room and hasattr(room, "awareness"):
+                        for client_id, state in room.awareness.states.items():
+                            cursor = state.get("cursor")
+                            if cursor:
+                                cursors.append(
+                                    {
+                                        "user_id": str(client_id),
+                                        "position": cursor.get(
+                                            "position", {"line": 0, "column": 0}
+                                        ),
+                                        "selection": cursor.get("selection"),
+                                    }
+                                )
+                except Exception as e:
+                    logger.warning(f"Error querying cursor positions: {e}")
+
+            return cursors
+        except Exception as e:
+            logger.error(f"Error getting user cursors: {e}")
+            return []
 
     async def update_cursor_position(
         self,
@@ -614,48 +675,53 @@ class RTCAdapter:
         selection: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Update the current user's cursor position."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # In a real implementation, this would update the awareness system
+            user_id = "current_user"  # Would get from authenticated context
 
-        # In a real implementation, this would update the awareness system
-        user_id = "current_user"  # Would get from authenticated context
-        return {
-            "success": True,
-            "user_id": user_id,
-            "document_path": document_path,
-            "position": position,
-            "timestamp": IOLoop.current().time(),
-        }
+            # For now, just return success
+            return {
+                "success": True,
+                "user_id": user_id,
+                "document_path": document_path,
+                "position": position,
+                "timestamp": IOLoop.current().time(),
+            }
+        except Exception as e:
+            logger.error(f"Error updating cursor position: {e}")
+            return {"success": False, "error": str(e)}
 
     async def get_user_activity(
         self, document_path: Optional[str] = None, limit: int = 20
     ) -> List[Dict[str, Any]]:
         """Get recent activity for users."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # In a real implementation, this would query the activity system
+            # For now, return a basic implementation
+            activities = []
 
-        # In a real implementation, this would query the activity system
-        activities = [
-            {
-                "user_id": "user1",
-                "activity_type": "edit",
-                "description": "Edited notebook cell",
-                "document_path": "/example.ipynb",
-                "timestamp": IOLoop.current().time() - 60,
-            },
-            {
-                "user_id": "user2",
-                "activity_type": "view",
-                "description": "Opened document",
-                "document_path": "/example.md",
-                "timestamp": IOLoop.current().time() - 120,
-            },
-        ]
+            # We could track basic activities in the sessions
+            for session_id, session in self._sessions.items():
+                if document_path and session.get("path") != document_path:
+                    continue
 
-        if document_path:
-            activities = [a for a in activities if a.get("document_path") == document_path]
+                activities.append(
+                    {
+                        "user_id": session.get("user_id", "unknown"),
+                        "activity_type": "session",
+                        "description": f"Joined {session.get('type')} session",
+                        "document_path": session.get("path"),
+                        "timestamp": session.get("created_at", 0),
+                    }
+                )
 
-        return activities[:limit]
+            # Sort by timestamp (newest first)
+            activities.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            return activities[:limit]
+        except Exception as e:
+            logger.error(f"Error getting user activity: {e}")
+            return []
 
     async def broadcast_user_activity(
         self,
@@ -665,72 +731,100 @@ class RTCAdapter:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Broadcast a user activity to other collaborators."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
+        try:
+            # In a real implementation, this would broadcast to the activity system
+            user_id = "current_user"  # Would get from authenticated context
 
-        # In a real implementation, this would broadcast to the activity system
-        user_id = "current_user"  # Would get from authenticated context
+            activity = {
+                "user_id": user_id,
+                "activity_type": activity_type,
+                "description": description,
+                "document_path": document_path,
+                "metadata": metadata or {},
+                "timestamp": IOLoop.current().time(),
+            }
 
-        activity = {
-            "user_id": user_id,
-            "activity_type": activity_type,
-            "description": description,
-            "document_path": document_path,
-            "metadata": metadata or {},
-            "timestamp": IOLoop.current().time(),
-        }
-
-        return {"success": True, "activity": activity}
+            # For now, just return success
+            return {"success": True, "activity": activity}
+        except Exception as e:
+            logger.error(f"Error broadcasting user activity: {e}")
+            return {"success": False, "error": str(e)}
 
     async def get_active_sessions(
         self, document_path: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Get active collaboration sessions."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
-        sessions = list(self._sessions.values())
-
-        if document_path:
-            sessions = [s for s in sessions if s.get("path") == document_path]
-
-        return sessions
+        try:
+            sessions = list(self._sessions.values())
+            if document_path:
+                sessions = [s for s in sessions if s.get("path") == document_path]
+            return sessions
+        except Exception as e:
+            logger.error(f"Error getting active sessions: {e}")
+            return []
 
     async def join_session(self, session_id: str) -> Dict[str, Any]:
         """Join an existing collaboration session."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         if session_id not in self._sessions:
-            raise ValueError(f"Session not found: {session_id}")
+            return {"success": False, "error": f"Session not found: {session_id}"}
 
-        session = self._sessions[session_id]
-        session["joined_at"] = IOLoop.current().time()
-
-        return {
-            "success": True,
-            "session_id": session_id,
-            "timestamp": IOLoop.current().time(),
-        }
+        try:
+            session = self._sessions[session_id]
+            session["joined_at"] = IOLoop.current().time()
+            return {
+                "success": True,
+                "session_id": session_id,
+                "timestamp": IOLoop.current().time(),
+            }
+        except Exception as e:
+            logger.error(f"Error joining session: {e}")
+            return {"success": False, "error": str(e)}
 
     async def leave_session(self, session_id: str) -> Dict[str, Any]:
         """Leave a collaboration session."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-
         if session_id not in self._sessions:
-            raise ValueError(f"Session not found: {session_id}")
+            return {"success": False, "error": f"Session not found: {session_id}"}
 
-        session = self._sessions[session_id]
-        session["left_at"] = IOLoop.current().time()
-
-        return {
-            "success": True,
-            "session_id": session_id,
-            "timestamp": IOLoop.current().time(),
-        }
+        try:
+            session = self._sessions[session_id]
+            session["left_at"] = IOLoop.current().time()
+            return {
+                "success": True,
+                "session_id": session_id,
+                "timestamp": IOLoop.current().time(),
+            }
+        except Exception as e:
+            logger.error(f"Error leaving session: {e}")
+            return {"success": False, "error": str(e)}
 
     # Helper methods
+
+    async def _get_collaborator_count(self, room_id: str) -> int:
+        """Get the number of collaborators in a room."""
+        if not hasattr(self.ydoc_extension, "ywebsocket_server"):
+            return 0
+
+        try:
+            room = await self.ydoc_extension.ywebsocket_server.get_room(room_id)
+            if room and hasattr(room, "awareness"):
+                # Count connected users (excluding local user)
+                return max(0, len(room.awareness.states) - 1)
+        except Exception:
+            # Room might not exist yet
+            pass
+        return 0
+
+    def _filter_and_sort_items(
+        self, items: List[Dict[str, Any]], path_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Apply path filter and sort items by last modified date."""
+        # Apply path filter if provided
+        if path_filter:
+            items = [item for item in items if path_filter in item["path"]]
+
+        # Sort by last modified date (newest first)
+        items.sort(key=lambda x: x["last_modified"], reverse=True)
+        return items
 
     def _get_file_type(self, path: str) -> str:
         """Determine file type from path."""
@@ -776,138 +870,3 @@ class RTCAdapter:
             return json.dumps(activities, indent=2)
         else:
             return "{}"
-
-
-class MockYDocExtension:
-    """Mock YDocExtension for development/testing."""
-
-    def __init__(self):
-        self.rooms = {}
-
-    async def get_room(self, path: str, file_type: str):
-        """Get or create a room for a document."""
-        key = f"{path}:{file_type}"
-        if key not in self.rooms:
-            self.rooms[key] = MockDocumentRoom(path, file_type)
-        return self.rooms[key]
-
-
-class MockDocumentRoom:
-    """Mock DocumentRoom for development/testing."""
-
-    def __init__(self, path: str, file_type: str):
-        self.path = path
-        self.file_type = file_type
-        self.content = self._get_default_content()
-        self.version = 1
-
-    def _get_default_content(self) -> Union[str, Dict]:
-        """Get default content based on file type."""
-        if self.file_type == "notebook":
-            return {
-                "cells": [
-                    {
-                        "cell_type": "code",
-                        "execution_count": None,
-                        "metadata": {},
-                        "outputs": [],
-                        "source": ["print('Hello, World!')"],
-                    }
-                ],
-                "metadata": {},
-                "nbformat": 4,
-                "nbformat_minor": 4,
-            }
-        else:
-            return "# Default Document\n\nThis is a default document."
-
-    async def get_content(self) -> Union[str, Dict]:
-        """Get the document content."""
-        return self.content
-
-    async def update_cell(self, cell_id: str, content: str, cell_type: Optional[str] = None):
-        """Update a notebook cell."""
-        if isinstance(self.content, dict) and "cells" in self.content:
-            for cell in self.content["cells"]:
-                # In a real implementation, cells would have IDs
-                if cell.get("source") and content in cell["source"][0]:
-                    cell["source"] = [content]
-                    if cell_type:
-                        cell["cell_type"] = cell_type
-                    break
-        self.version += 1
-
-    async def insert_cell(self, content: str, position: int, cell_type: str = "code") -> str:
-        """Insert a new cell into a notebook."""
-        if isinstance(self.content, dict) and "cells" in self.content:
-            cell_id = f"cell_{len(self.content['cells'])}"
-            new_cell = {
-                "cell_type": cell_type,
-                "execution_count": None,
-                "metadata": {},
-                "outputs": [],
-                "source": [content],
-            }
-            self.content["cells"].insert(position, new_cell)
-            self.version += 1
-            return cell_id
-        return ""
-
-    async def delete_cell(self, cell_id: str):
-        """Delete a cell from a notebook."""
-        if isinstance(self.content, dict) and "cells" in self.content:
-            # In a real implementation, cells would have IDs
-            self.version += 1
-
-    async def execute_cell(self, cell_id: str, timeout: int = 30) -> Dict[str, Any]:
-        """Execute a notebook cell."""
-        return {
-            "execution_count": 1,
-            "outputs": [{"name": "stdout", "output_type": "stream", "text": ["Hello, World!\n"]}],
-        }
-
-    async def update_content(self, content: str, position: int = -1, length: int = 0):
-        """Update document content."""
-        if position == -1:
-            # Replace entire content
-            self.content = content
-        else:
-            # Replace partial content
-            if isinstance(self.content, str):
-                self.content = self.content[:position] + content + self.content[position + length :]
-        self.version += 1
-
-    async def insert_text(self, text: str, position: int) -> int:
-        """Insert text into a document."""
-        if isinstance(self.content, str):
-            self.content = self.content[:position] + text + self.content[position:]
-            self.version += 1
-            return len(self.content)
-        return 0
-
-    async def delete_text(self, position: int, length: int) -> int:
-        """Delete text from a document."""
-        if isinstance(self.content, str):
-            self.content = self.content[:position] + self.content[position + length :]
-            self.version += 1
-            return len(self.content)
-        return 0
-
-    async def get_version(self) -> int:
-        """Get the document version."""
-        return self.version
-
-    async def get_history(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get document history."""
-        return [
-            {
-                "version": self.version - 1,
-                "timestamp": IOLoop.current().time() - 3600,
-                "changes": "Initial content",
-            }
-        ]
-
-    async def restore_version(self, version_id: str):
-        """Restore a document version."""
-        # In a real implementation, this would restore from history
-        self.version += 1
