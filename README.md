@@ -153,28 +153,11 @@ isort jupyter_collaboration_mcp tests
 
 #### Auto-formatting on Commit
 
-To set up automatic code formatting on each commit, you have two options:
+To set up automatic code formatting on each commit, run the setup script:
 
-##### Option 1: Using Pre-commit (Recommended)
-
-1. Install pre-commit:
-   ```bash
-   pip install pre-commit
-   ```
-
-2. Install the pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
-
-Now your code will be automatically formatted before each commit.
-
-##### Option 2: Using Git Hooks
-
-1. Run the setup script:
-   ```bash
-   ./scripts/setup-git-hooks.sh
-   ```
+```bash
+./scripts/setup-git-hooks.sh
+```
 
 This will set up a Git hook that automatically formats your Python files with black and isort before each commit.
 
@@ -311,8 +294,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
 4. Set up auto-formatting (optional but recommended):
-   - Using pre-commit: `pre-commit install`
-   - Or using Git hooks: `./scripts/setup-git-hooks.sh`
+   - Using Git hooks: `./scripts/setup-git-hooks.sh`
 5. Run tests and ensure code quality (`pytest`, `black`, `isort`, `mypy`)
 5. Commit your changes (`git commit -m 'Add some amazing feature'`)
 6. Push to the branch (`git push origin feature/amazing-feature`)
