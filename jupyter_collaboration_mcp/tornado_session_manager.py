@@ -134,7 +134,9 @@ class TornadoSessionManager:
         # The connection will be closed when the client disconnects
         # or when the session is ended
 
-    async def _handle_post(self, request_handler: RequestHandler, path: str, request_data: Any) -> None:
+    async def _handle_post(
+        self, request_handler: RequestHandler, path: str, request_data: Any
+    ) -> None:
         """Handle POST requests containing MCP messages.
 
         Args:
@@ -145,30 +147,19 @@ class TornadoSessionManager:
         # Get or create session ID from headers
         session_id = self._get_or_create_session_id(request_handler)
 
-        # Add debug logging
-        print(f"DEBUG: _handle_post called with path: {path}", file=sys.stderr)
-        print(f"DEBUG: Request data: {request_data}", file=sys.stderr)
-        print(f"DEBUG: JSON response mode: {self.json_response}", file=sys.stderr)
-        print(f"DEBUG: SSE handler exists: {session_id in self._sse_handlers}", file=sys.stderr)
-
         # Process MCP message
         try:
             # Handle tool calls
             if "method" in request_data and request_data["method"] == "tools/call":
-                print(f"DEBUG: Handling tools/call request", file=sys.stderr)
                 result = await self._handle_tool_call(session_id, request_data)
-                
+
                 if self.json_response or not self._sse_handlers.get(session_id):
                     # Send JSON response
-                    print(f"DEBUG: Sending JSON response for tool call", file=sys.stderr)
-                    print(f"DEBUG: Response to send: {result}", file=sys.stderr)
                     json_response_str = json.dumps(result)
-                    print(f"DEBUG: JSON string: {json_response_str}", file=sys.stderr)
                     request_handler.set_header("Content-Type", "application/json")
                     request_handler.finish(json_response_str)
                 else:
                     # Send via SSE
-                    print(f"DEBUG: Sending SSE response for tool call", file=sys.stderr)
                     sse_handler = self._sse_handlers[session_id]
                     await sse_handler.send_event(
                         event_type="tool_result",
@@ -177,20 +168,15 @@ class TornadoSessionManager:
                     request_handler.finish()
             else:
                 # Handle other MCP messages
-                print(f"DEBUG: Handling other MCP message", file=sys.stderr)
                 result = await self._handle_mcp_message(session_id, request_data)
-                
+
                 if self.json_response or not self._sse_handlers.get(session_id):
                     # Send JSON response
-                    print(f"DEBUG: Sending JSON response for MCP message", file=sys.stderr)
-                    print(f"DEBUG: Response to send: {result}", file=sys.stderr)
                     json_response_str = json.dumps(result)
-                    print(f"DEBUG: JSON string: {json_response_str}", file=sys.stderr)
                     request_handler.set_header("Content-Type", "application/json")
                     request_handler.finish(json_response_str)
                 else:
                     # Send via SSE
-                    print(f"DEBUG: Sending SSE response for MCP message", file=sys.stderr)
                     sse_handler = self._sse_handlers[session_id]
                     await sse_handler.send_event(
                         event_type="mcp_response",
@@ -199,7 +185,7 @@ class TornadoSessionManager:
                     request_handler.finish()
         except Exception as e:
             logger.error(f"Error processing MCP message: {e}", exc_info=True)
-            
+
             error_response = {
                 "jsonrpc": "2.0",
                 "id": request_data.get("id"),
@@ -208,9 +194,7 @@ class TornadoSessionManager:
                     "message": str(e),
                 },
             }
-            
-            print(f"DEBUG: Sending error response: {error_response}", file=sys.stderr)
-            
+
             if self.json_response or not self._sse_handlers.get(session_id):
                 request_handler.set_header("Content-Type", "application/json")
                 request_handler.finish(json.dumps(error_response))
@@ -250,6 +234,7 @@ class TornadoSessionManager:
         """
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
 
         self._sessions[session_id] = {
@@ -292,7 +277,9 @@ class TornadoSessionManager:
         # Start heartbeat
         IOLoop.current().add_callback(sse_handler.start_heartbeat_loop)
 
-    async def _handle_tool_call(self, session_id: str, request_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_tool_call(
+        self, session_id: str, request_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Handle a tool call request.
 
         Args:
@@ -308,48 +295,25 @@ class TornadoSessionManager:
         if not tool_name:
             raise ValueError("Tool name is required")
 
-        # Add debug logging
-        print(f"DEBUG: Tool call request - tool_name: {tool_name}, arguments: {arguments}", file=sys.stderr)
-        print(f"DEBUG: Request data: {request_data}", file=sys.stderr)
-
         # Look up the tool handler and call it directly
-        if hasattr(self.mcp_server, 'tool_handlers') and tool_name in self.mcp_server.tool_handlers:
+        if hasattr(self.mcp_server, "tool_handlers") and tool_name in self.mcp_server.tool_handlers:
             tool_handler = self.mcp_server.tool_handlers[tool_name]
             content_blocks = await tool_handler(tool_name, arguments)
-            
-            # Add debug logging for content blocks
-            print(f"DEBUG: Content blocks received: {content_blocks}", file=sys.stderr)
-            print(f"DEBUG: Content block types: {[type(block) for block in content_blocks]}", file=sys.stderr)
-            
+
             # Convert content blocks to proper MCP response format
             # The MCP protocol expects content blocks to be in a specific format
-            result = {
-                "content": []
-            }
-            
+            result = {"content": []}
+
             for block in content_blocks:
-                if hasattr(block, 'type') and hasattr(block, 'text'):
+                if hasattr(block, "type") and hasattr(block, "text"):
                     # Preserve TextContent structure
-                    result["content"].append({
-                        "type": block.type,
-                        "text": block.text
-                    })
-                elif hasattr(block, 'type') and hasattr(block, 'content'):
+                    result["content"].append({"type": block.type, "text": block.text})
+                elif hasattr(block, "type") and hasattr(block, "content"):
                     # Preserve other ContentBlock types
-                    result["content"].append({
-                        "type": block.type,
-                        "content": block.content
-                    })
+                    result["content"].append({"type": block.type, "content": block.content})
                 else:
                     # Fallback for unknown block types
-                    result["content"].append({
-                        "type": "text",
-                        "text": str(block)
-                    })
-                
-            # Add debug logging for result
-            print(f"DEBUG: Final result: {result}", file=sys.stderr)
-            print(f"DEBUG: Result type: {type(result)}", file=sys.stderr)
+                    result["content"].append({"type": "text", "text": str(block)})
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
 
@@ -370,14 +334,12 @@ class TornadoSessionManager:
             "id": request_data.get("id"),
             "result": result,
         }
-        
-        # Add debug logging for final response
-        print(f"DEBUG: Final tool call response: {response}", file=sys.stderr)
-        print(f"DEBUG: Response type: {type(response)}", file=sys.stderr)
-        
+
         return response
 
-    async def _handle_mcp_message(self, session_id: str, request_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_mcp_message(
+        self, session_id: str, request_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Handle a generic MCP message.
 
         Args:
@@ -389,12 +351,7 @@ class TornadoSessionManager:
         """
         method = request_data.get("method")
         request_id = request_data.get("id")
-        
-        # Add debug logging
-        print(f"DEBUG: Handling MCP message: method={method}, id={request_id}", file=sys.stderr)
-        print(f"DEBUG: Request data: {request_data}", file=sys.stderr)
-        print(f"DEBUG: Request data type: {type(request_data)}", file=sys.stderr)
-        
+
         # Store event if event store is available
         if self.event_store:
             await self.event_store.store_event(
@@ -407,32 +364,20 @@ class TornadoSessionManager:
 
         # Handle MCP initialization
         if method == "initialize":
-            print(f"DEBUG: Handling MCP initialization request", file=sys.stderr)
             result = {
                 "protocolVersion": "2024-11-05",
-                "capabilities": {
-                    "tools": {
-                        "listChanged": True
-                    }
-                },
-                "serverInfo": {
-                    "name": "jupyter-collaboration-mcp",
-                    "version": "0.1.0"
-                }
+                "capabilities": {"tools": {"listChanged": True}},
+                "serverInfo": {"name": "jupyter-collaboration-mcp", "version": "0.1.0"},
             }
-            print(f"DEBUG: Returning initialization result: {result}", file=sys.stderr)
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "result": result,
             }
-            print(f"DEBUG: Final initialization response: {response}", file=sys.stderr)
             return response
-        
+
         # Handle tools/list request
         elif method == "tools/list":
-            print(f"DEBUG: Handling tools/list request", file=sys.stderr)
-            print(f"DEBUG: About to construct tools list with boolean values", file=sys.stderr)
             result = {
                 "tools": [
                     {
@@ -443,10 +388,10 @@ class TornadoSessionManager:
                             "properties": {
                                 "path": {
                                     "type": "string",
-                                    "description": "Path filter for notebooks"
+                                    "description": "Path filter for notebooks",
                                 }
-                            }
-                        }
+                            },
+                        },
                     },
                     {
                         "name": "get_notebook",
@@ -455,17 +400,14 @@ class TornadoSessionManager:
                             "type": "object",
                             "required": ["path"],
                             "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "Path to the notebook"
-                                },
+                                "path": {"type": "string", "description": "Path to the notebook"},
                                 "include_collaboration_state": {
                                     "type": "boolean",
                                     "description": "Include collaboration state",
-                                    "default": True
-                                }
-                            }
-                        }
+                                    "default": True,
+                                },
+                            },
+                        },
                     },
                     {
                         "name": "create_notebook_session",
@@ -474,32 +416,25 @@ class TornadoSessionManager:
                             "type": "object",
                             "required": ["path"],
                             "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "Path to the notebook"
-                                }
-                            }
-                        }
-                    }
+                                "path": {"type": "string", "description": "Path to the notebook"}
+                            },
+                        },
+                    },
                 ]
             }
-            print(f"DEBUG: Returning tools/list result: {result}", file=sys.stderr)
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "result": result,
             }
-            print(f"DEBUG: Final tools/list response: {response}", file=sys.stderr)
             return response
-        
+
         # For other methods, just return a basic response
-        print(f"DEBUG: Handling unknown method: {method}", file=sys.stderr)
         response = {
             "jsonrpc": "2.0",
             "id": request_id,
             "result": {"status": "ok"},
         }
-        print(f"DEBUG: Final unknown method response: {response}", file=sys.stderr)
         return response
 
     def _get_or_create_session_id(self, request_handler: RequestHandler) -> str:
@@ -507,6 +442,7 @@ class TornadoSessionManager:
         session_id = request_handler.request.headers.get("mcp-session-id")
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
             self._sessions[session_id] = {"created_at": IOLoop.current().time()}
         return session_id

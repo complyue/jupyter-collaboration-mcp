@@ -74,35 +74,22 @@ class MCPHandler(RequestHandler):
     async def get(self, path: str = ""):
         """Handle GET requests for SSE streams."""
         try:
-            # Print debug info to stderr
-            print(f"DEBUG: Received MCP GET request: {self.request.method} {self.request.path}", file=sys.stderr)
-            print(f"DEBUG: Request headers:", file=sys.stderr)
-            for name, value in self.request.headers.get_all():
-                print(f"DEBUG:   {name}: {value}", file=sys.stderr)
-            
             # Handle the request with the session manager
             await self.session_manager.handle_request(self)
         except Exception as e:
             logger.error(f"Error handling MCP GET request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     async def post(self, path: str = ""):
         """Handle POST requests containing MCP messages."""
         try:
-            # Print debug info to stderr
-            print(f"DEBUG: Received MCP POST request: {self.request.method} {self.request.path}", file=sys.stderr)
-            print(f"DEBUG: Request headers:", file=sys.stderr)
-            for name, value in self.request.headers.get_all():
-                print(f"DEBUG:   {name}: {value}", file=sys.stderr)
-            print(f"DEBUG: Request body: {self.request.body}", file=sys.stderr)
-            
             # Handle the request with the session manager
             await self.session_manager.handle_request(self)
         except Exception as e:
             logger.error(f"Error handling MCP POST request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     async def put(self, path: str = ""):
         """Handle PUT requests."""
@@ -111,7 +98,7 @@ class MCPHandler(RequestHandler):
         except Exception as e:
             logger.error(f"Error handling MCP PUT request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     async def delete(self, path: str = ""):
         """Handle DELETE requests for session termination."""
@@ -120,7 +107,7 @@ class MCPHandler(RequestHandler):
         except Exception as e:
             logger.error(f"Error handling MCP DELETE request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     async def patch(self, path: str = ""):
         """Handle PATCH requests."""
@@ -129,7 +116,7 @@ class MCPHandler(RequestHandler):
         except Exception as e:
             logger.error(f"Error handling MCP PATCH request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     async def head(self, path: str = ""):
         """Handle HEAD requests."""
@@ -138,7 +125,7 @@ class MCPHandler(RequestHandler):
         except Exception as e:
             logger.error(f"Error handling MCP HEAD request: {e}", exc_info=True)
             self.set_status(500)
-            self.finish("Internal server error")
+            self.finish(f"Internal server error: {e}")
 
     def options(self, *args, **kwargs):
         """Handle OPTIONS requests for CORS preflight."""
@@ -156,30 +143,32 @@ class MCPServerExtension(ExtensionApp):
     def initialize(self):
         """Initialize the extension."""
         super().initialize()
-        
+
         # Configure authentication with token from Jupyter's command line
         token = getattr(self.serverapp.identity_provider, "token", None)
         if token:
             configure_auth_with_token(token)
             self.log.info(f"Configured authentication with token from command line")
         else:
-            self.log.warning("No token found in Jupyter configuration, using default authentication")
-            
+            self.log.warning(
+                "No token found in Jupyter configuration, using default authentication"
+            )
+
         self.mcp_server = MCPServer()
-        
+
         self.log.info("Jupyter Collaboration MCP Server extension initialized")
-    
+
     def stop_extension(self):
         """Stop the extension and clean up resources."""
-        if hasattr(self, 'mcp_server'):
+        if hasattr(self, "mcp_server"):
             self.log.info("Stopping MCP server")
             # Clean up sessions
             IOLoop.current().add_callback(self._cleanup_sessions)
-    
+
     async def _cleanup_sessions(self):
         """Clean up all active sessions."""
         try:
-            if hasattr(self.mcp_server, 'session_manager'):
+            if hasattr(self.mcp_server, "session_manager"):
                 # End all active sessions
                 for session_id in list(self.mcp_server.session_manager._sessions.keys()):
                     await self.mcp_server.session_manager.end_session(session_id)
@@ -195,12 +184,22 @@ class MCPServerExtension(ExtensionApp):
 
         # Initialize the RTC adapter with the server app
         if not self.mcp_server.rtc_adapter._initialized:
-            print(f"DEBUG: Initializing RTC adapter with server app", file=sys.stderr)
+            logger.info(f"DEBUG: Initializing RTC adapter with server app")
             IOLoop.current().add_callback(self.mcp_server.rtc_adapter.initialize, self.serverapp)
 
         # Add the MCP server to the Jupyter server app using a Tornado handler
         self.serverapp.web_app.add_handlers(
-            ".*", [(r"/mcp.*", MCPHandler, {"session_manager": self.mcp_server.session_manager, "serverapp": self.serverapp})]
+            ".*",
+            [
+                (
+                    r"/mcp.*",
+                    MCPHandler,
+                    {
+                        "session_manager": self.mcp_server.session_manager,
+                        "serverapp": self.serverapp,
+                    },
+                )
+            ],
         )
 
         self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
@@ -216,7 +215,7 @@ class MCPServer:
         self.event_store = TornadoEventStore()
         # Set up handlers first to populate tool_handlers
         self._setup_handlers()
-        
+
         # Create a single session manager for the entire application
         self.session_manager = TornadoSessionManager(
             mcp_server=self,  # Pass self (MCPServer) instead of self.server (MCP Server)
@@ -226,17 +225,15 @@ class MCPServer:
     def _setup_handlers(self):
         """Register all MCP tools."""
         # Initialize handlers and store them as instance variables
-        print(f"DEBUG: Setting up handlers, rtc_adapter initialized: {self.rtc_adapter._initialized}", file=sys.stderr)
         self.notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
         self.document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
         self.awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
-        
+
         # Collect all tool handlers for direct access
         self.tool_handlers = {}
         self.tool_handlers.update(self.notebook_handlers.tool_handlers)
         self.tool_handlers.update(self.document_handlers.tool_handlers)
         self.tool_handlers.update(self.awareness_handlers.tool_handlers)
-        print(f"DEBUG: Tool handlers set up: {list(self.tool_handlers.keys())}", file=sys.stderr)
 
     def create_app(self):
         """Create a simple Tornado application with MCP endpoints."""
@@ -253,7 +250,7 @@ class MCPServer:
 
         # Broadcast to all active sessions
         await self.session_manager.broadcast_event(event_type, data)
-        
+
         logger.info(f"Broadcast event sent: {event_type}")
 
     async def get_server_info(self) -> dict:
