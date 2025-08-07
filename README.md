@@ -23,6 +23,12 @@ This project enables AI agents to interact with collaborative Jupyter notebooks 
 - Jupyter Server 2.0.0 or higher
 - Jupyter Collaboration 2.0.0 or higher
 
+### From Conda (when published)
+
+```bash
+conda install -c conda-forge jupyter-collaboration-mcp
+```
+
 ### From PyPI (when published)
 
 ```bash
@@ -37,28 +43,9 @@ cd jupyter-collaboration-mcp
 pip install -e .
 ```
 
-The extension will be automatically loaded when you start Jupyter Server. No additional configuration is required.
-
 ## Configuration
 
 The MCP server is automatically loaded as a Jupyter server extension when installed. No manual configuration is required.
-
-### Standalone Server
-
-You can also run the MCP server as a standalone application:
-
-```bash
-jupyter-collaboration-mcp --host 0.0.0.0 --port 8000
-```
-
-#### Command Line Options
-
-```
---host HOST                Host to bind to (default: 127.0.0.1)
---port PORT                Port to bind to (default: 8000)
---log-level LEVEL         Logging level (default: INFO)
---jupyter-config PATH     Path to Jupyter server configuration file
-```
 
 ## Authentication
 
@@ -136,12 +123,6 @@ pip install -e ".[dev]"
 
 This will install the package in development mode along with all development dependencies.
 
-### Running Tests
-
-```bash
-pytest
-```
-
 ### Code Formatting
 
 The project uses Black for code formatting and isort for import sorting. You can format code manually:
@@ -169,30 +150,11 @@ The project uses mypy for type checking:
 mypy jupyter_collaboration_mcp
 ```
 
-### Running in Development Mode
-
-#### As a Jupyter Server Extension
-
-```bash
-# Start Jupyter server with the extension and a token
-# The extension is automatically loaded when installed
-jupyter lab --IdentityProvider.token=dev-token
-```
-
-#### As a Standalone Server
-
-```bash
-# Run the MCP server in development mode
-python -m jupyter_collaboration_mcp --host 127.0.0.1 --port 8000 --log-level DEBUG
-```
-
-## API Usage
-
-### MCP Tools
+## MCP Tools
 
 The server exposes the following MCP tools:
 
-#### Notebook Operations
+### Notebook Operations
 
 - `list_notebooks`: List available notebooks
 - `get_notebook`: Get notebook content
@@ -202,7 +164,7 @@ The server exposes the following MCP tools:
 - `delete_notebook_cell`: Delete a cell
 - `execute_notebook_cell`: Execute a cell
 
-#### Document Operations
+### Document Operations
 
 - `list_documents`: List available documents
 - `get_document`: Get document content
@@ -215,7 +177,7 @@ The server exposes the following MCP tools:
 - `fork_document`: Create a fork of a document
 - `merge_document_fork`: Merge a fork back into the original
 
-#### Awareness Operations
+### Awareness Operations
 
 - `get_online_users`: Get list of online users
 - `get_user_presence`: Get user presence information
@@ -228,40 +190,6 @@ The server exposes the following MCP tools:
 - `join_session`: Join a collaboration session
 - `leave_session`: Leave a collaboration session
 
-### Authentication
-
-All MCP requests must include a token in the Authorization header:
-
-```
-Authorization: Identity.token your-secret-token
-```
-
-The token must match the one provided when starting Jupyter Lab with `--IdentityProvider.token=your-secret-token`.
-
-## Example Usage
-
-### MCP Client Configuration Example
-
-Here's a complete example of how to configure an MCP client to connect to the Jupyter Collaboration MCP Server:
-
-```json
-{
-  "mcpServers": {
-    "jupyter-collaboration": {
-      "url": "http://localhost:8888/mcp",
-      "headers": { "Authorization": "Identity.token your-secret-token" },
-      "disabled": false
-    }
-  }
-}
-```
-
-Replace `your-secret-token` with the actual token you used when starting Jupyter Lab.
-
-### Testing the Connection
-
-Once configured, you can test the connection by listing available notebooks through your MCP client. The exact method depends on your client, but it typically involves calling the `list_notebooks` tool.
-
 ## Troubleshooting
 
 ### Common Issues
@@ -270,45 +198,9 @@ Once configured, you can test the connection by listing available notebooks thro
 2. **Connection Refused**: Verify that your Jupyter server is running and the MCP extension is loaded
 3. **CORS Errors**: If running in a browser environment, make sure the server's CORS configuration allows your client's origin
 
-### Debug Mode
-
-To enable debug logging, you can:
-
-1. Set the log level to DEBUG when starting the server:
-   ```bash
-   jupyter lab --log-level=DEBUG
-   ```
-
-2. Or add this to your `jupyter_server_config.py`:
-   ```python
-   c.Application.log_level = 'DEBUG'
-   ```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Set up auto-formatting (optional but recommended):
-   - Using Git hooks: `./scripts/setup-git-hooks.sh`
-5. Run tests and ensure code quality (`pytest`, `black`, `isort`, `mypy`)
-5. Commit your changes (`git commit -m 'Add some amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
 ## License
 
-This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- Documentation: [Jupyter Collaboration MCP Server Documentation](https://jupyter-collaboration-mcp.readthedocs.io)
-- Issues: [GitHub Issues](https://github.com/jupyter/jupyter-collaboration-mcp/issues)
-- Discussions: [GitHub Discussions](https://github.com/jupyter/jupyter-collaboration-mcp/discussions)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
