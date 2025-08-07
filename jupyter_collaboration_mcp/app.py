@@ -12,14 +12,14 @@ from typing import Any, Dict, Optional
 
 import mcp.types as types
 from jupyter_server.extension.application import ExtensionApp
-from mcp.server.lowlevel import Server
+from mcp.server import FastMCP
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
 
 from .auth import authenticate_mcp_request, configure_auth_with_token
-from .handlers import AwarenessHandlers, DocumentHandlers, NotebookHandlers
 from .rtc_adapter import RTCAdapter
+from .tools import define_awareness_tools, define_document_tools, define_notebook_tools
 from .tornado_event_store import TornadoEventStore
 from .tornado_session_manager import TornadoSessionManager
 
@@ -154,13 +154,11 @@ class MCPServerExtension(ExtensionApp):
                 "No token found in Jupyter configuration, using default authentication"
             )
 
-        self.mcp_server = MCPServer()
-
         self.log.info("Jupyter Collaboration MCP Server extension initialized")
 
     def stop_extension(self):
         """Stop the extension and clean up resources."""
-        if hasattr(self, "mcp_server"):
+        if hasattr(self, "fastmcp"):
             self.log.info("Stopping MCP server")
             # Clean up sessions
             IOLoop.current().add_callback(self._cleanup_sessions)
@@ -168,24 +166,29 @@ class MCPServerExtension(ExtensionApp):
     async def _cleanup_sessions(self):
         """Clean up all active sessions."""
         try:
-            if hasattr(self.mcp_server, "session_manager"):
-                # End all active sessions
-                for session_id in list(self.mcp_server.session_manager._sessions.keys()):
-                    await self.mcp_server.session_manager.end_session(session_id)
+            if hasattr(self, "session_manager"):
+                for session_id in list(self.session_manager._sessions.keys()):
+                    await self.session_manager.end_session(session_id)
                 self.log.info("All sessions cleaned up")
         except Exception as e:
             self.log.error(f"Error cleaning up sessions: {e}", exc_info=True)
 
     def initialize_handlers(self):
         """Initialize the handlers for the extension."""
-        # Ensure mcp_server is initialized
-        if not hasattr(self, "mcp_server"):
-            self.mcp_server = MCPServer()
 
-        # Initialize the RTC adapter with the server app
-        if not self.mcp_server.rtc_adapter._initialized:
-            logger.info(f"DEBUG: Initializing RTC adapter with server app")
-            IOLoop.current().add_callback(self.mcp_server.rtc_adapter.initialize, self.serverapp)
+        event_store = TornadoEventStore()
+
+        rtc_adapter = RTCAdapter()
+        logger.info(f"DEBUG: Initializing RTC adapter with server app")
+        IOLoop.current().add_callback(rtc_adapter.initialize, self.serverapp)
+
+        fastmcp = FastMCP("jupyter-collaboration-mcp")
+
+        define_notebook_tools(fastmcp, rtc_adapter)
+        define_document_tools(fastmcp, rtc_adapter)
+        define_awareness_tools(fastmcp, rtc_adapter)
+
+        session_manager = TornadoSessionManager(fastmcp, event_store)
 
         # Add the MCP server to the Jupyter server app using a Tornado handler
         self.serverapp.web_app.add_handlers(
@@ -195,74 +198,13 @@ class MCPServerExtension(ExtensionApp):
                     r"/mcp.*",
                     MCPHandler,
                     {
-                        "session_manager": self.mcp_server.session_manager,
+                        "session_manager": session_manager,
                         "serverapp": self.serverapp,
                     },
                 )
             ],
         )
 
+        self.session_manager = session_manager
+
         self.log.info("Jupyter Collaboration MCP Server extension handlers initialized")
-
-
-class MCPServer:
-    """Main MCP Server for Jupyter Collaboration."""
-
-    def __init__(self):
-        """Initialize the MCP server."""
-        self.server = Server("jupyter-collaboration-mcp")
-        self.rtc_adapter = RTCAdapter()
-        self.event_store = TornadoEventStore()
-        # Set up handlers first to populate tool_handlers
-        self._setup_handlers()
-
-        # Create a single session manager for the entire application
-        self.session_manager = TornadoSessionManager(
-            mcp_server=self,  # Pass self (MCPServer) instead of self.server (MCP Server)
-            event_store=self.event_store,
-        )
-
-    def _setup_handlers(self):
-        """Register all MCP tools."""
-        # Initialize handlers and store them as instance variables
-        self.notebook_handlers = NotebookHandlers(self.server, self.rtc_adapter)
-        self.document_handlers = DocumentHandlers(self.server, self.rtc_adapter)
-        self.awareness_handlers = AwarenessHandlers(self.server, self.rtc_adapter)
-
-        # Collect all tool handlers for direct access
-        self.tool_handlers = {}
-        self.tool_handlers.update(self.notebook_handlers.tool_handlers)
-        self.tool_handlers.update(self.document_handlers.tool_handlers)
-        self.tool_handlers.update(self.awareness_handlers.tool_handlers)
-
-    def create_app(self):
-        """Create a simple Tornado application with MCP endpoints."""
-        # This method is kept for compatibility but is not used in the Tornado-native implementation
-        # The actual handling is done by the MCPHandler class
-        return None
-
-    async def broadcast_event(self, event_type: str, data: dict):
-        """Broadcast an event to all connected clients."""
-        event_message = {"type": event_type, "data": data, "timestamp": IOLoop.current().time()}
-
-        # Store the event
-        await self.event_store.store_event(stream_id="broadcast", message=event_message)
-
-        # Broadcast to all active sessions
-        await self.session_manager.broadcast_event(event_type, data)
-
-        logger.info(f"Broadcast event sent: {event_type}")
-
-    async def get_server_info(self) -> dict:
-        """Get server information."""
-        return {
-            "name": "jupyter-collaboration-mcp",
-            "version": "0.1.0",
-            "description": "MCP server for Jupyter Collaboration features",
-            "capabilities": {
-                "notebooks": True,
-                "documents": True,
-                "awareness": True,
-                "realtime": True,
-            },
-        }

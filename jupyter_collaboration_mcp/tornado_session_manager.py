@@ -11,7 +11,14 @@ import sys
 from typing import Any, Dict, Optional
 
 import mcp.types as types
-from mcp.server.lowlevel import Server
+from mcp.server import FastMCP
+from mcp.types import (
+    INTERNAL_ERROR,
+    INVALID_PARAMS,
+    ErrorData,
+    JSONRPCError,
+    JSONRPCResponse,
+)
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
@@ -27,18 +34,18 @@ class TornadoSessionManager:
 
     def __init__(
         self,
-        mcp_server: Any,  # Now accepts MCPServer instance which has tool_handlers
+        fastmcp: FastMCP,
         event_store: Optional[TornadoEventStore] = None,
         json_response: bool = False,
     ):
         """Initialize the session manager.
 
         Args:
-            mcp_server: The MCP server instance
+            fastmcp: The MCP server instance
             event_store: Optional event store for resumability
             json_response: Whether to use JSON responses instead of SSE
         """
-        self.mcp_server = mcp_server
+        self.fastmcp = fastmcp
         self.event_store = event_store or TornadoEventStore()
         self.json_response = json_response
         self._sessions: Dict[str, Dict[str, Any]] = {}
@@ -186,14 +193,37 @@ class TornadoSessionManager:
         except Exception as e:
             logger.error(f"Error processing MCP message: {e}", exc_info=True)
 
-            error_response = {
-                "jsonrpc": "2.0",
-                "id": request_data.get("id"),
-                "error": {
-                    "code": -32000,
-                    "message": str(e),
-                },
-            }
+            if isinstance(e, ErrorData):
+                error_data = e
+            else:
+                error_data = ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=str(e),
+                )
+
+            error_id = request_data.get("id")
+            logger.debug(
+                f"DEBUG: Creating JSONRPCError with id: {error_id} (type: {type(error_id)})"
+            )
+            logger.debug(f"DEBUG: request_data in error handler: {request_data}")
+
+            # Check if this is a notification (no id field) - notifications don't get error responses
+            if error_id is None:
+                logger.debug(f"DEBUG: Error occurred for notification - no error response needed")
+                if self.json_response or not self._sse_handlers.get(session_id):
+                    request_handler.finish("{}")  # Return empty JSON for notifications
+                else:
+                    request_handler.finish()
+                return
+
+            error_response = JSONRPCError(
+                jsonrpc="2.0",
+                id=error_id,
+                error=error_data,
+            )
+            error_response = error_response.model_dump(
+                by_alias=True, mode="json", exclude_none=True
+            )
 
             if self.json_response or not self._sse_handlers.get(session_id):
                 request_handler.set_header("Content-Type", "application/json")
@@ -293,29 +323,22 @@ class TornadoSessionManager:
         arguments = request_data.get("params", {}).get("arguments", {})
 
         if not tool_name:
-            raise ValueError("Tool name is required")
+            raise ErrorData(
+                code=INVALID_PARAMS,
+                message="Tool name is required",
+            )
 
-        # Look up the tool handler and call it directly
-        if hasattr(self.mcp_server, "tool_handlers") and tool_name in self.mcp_server.tool_handlers:
-            tool_handler = self.mcp_server.tool_handlers[tool_name]
-            content_blocks = await tool_handler(tool_name, arguments)
-
-            # Convert content blocks to proper MCP response format
-            # The MCP protocol expects content blocks to be in a specific format
-            result = {"content": []}
-
-            for block in content_blocks:
-                if hasattr(block, "type") and hasattr(block, "text"):
-                    # Preserve TextContent structure
-                    result["content"].append({"type": block.type, "text": block.text})
-                elif hasattr(block, "type") and hasattr(block, "content"):
-                    # Preserve other ContentBlock types
-                    result["content"].append({"type": block.type, "content": block.content})
-                else:
-                    # Fallback for unknown block types
-                    result["content"].append({"type": "text", "text": str(block)})
-        else:
-            raise ValueError(f"Unknown tool: {tool_name}")
+        # Use FastMCP's built-in tool calling mechanism
+        try:
+            result = await self.fastmcp.call_tool(tool_name, arguments)
+        except Exception as e:
+            if isinstance(e, ErrorData):
+                raise e
+            else:
+                raise ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=f"Error calling tool {tool_name}: {str(e)}",
+                )
 
         # Store event if event store is available
         if self.event_store:
@@ -329,13 +352,87 @@ class TornadoSessionManager:
                 },
             )
 
-        response = {
-            "jsonrpc": "2.0",
-            "id": request_data.get("id"),
-            "result": result,
-        }
+        tool_call_id = request_data.get("id")
+        logger.debug(
+            f"DEBUG: Creating JSONRPCResponse for tool call with id: {tool_call_id} (type: {type(tool_call_id)})"
+        )
+        logger.debug(f"DEBUG: request_data in tool call handler: {request_data}")
+        # Check if this is a notification (no id field) - notifications don't get responses
+        if tool_call_id is None:
+            logger.debug(f"DEBUG: Received tool call notification - no response needed")
+            return {}  # Return empty dict for notifications
 
-        return response
+        logger.debug(
+            f"DEBUG: Creating JSONRPCResponse for tool call with id: {tool_call_id} (type: {type(tool_call_id)})"
+        )
+        logger.debug(f"DEBUG: request_data in tool call handler: {request_data}")
+        logger.debug(f"DEBUG: result type: {type(result)}")
+        logger.debug(f"DEBUG: result value: {result}")
+        logger.debug(f"DEBUG: hasattr(result, 'model_dump'): {hasattr(result, 'model_dump')}")
+
+        # Handle FastMCP result format properly
+        logger.debug(f"DEBUG: Checking if result has model_dump attribute")
+        if hasattr(result, "model_dump"):
+            logger.debug(f"DEBUG: result has model_dump, calling it")
+            model_dump_result = result.model_dump(by_alias=True, mode="json", exclude_none=True)
+            logger.debug(f"DEBUG: model_dump_result type: {type(model_dump_result)}")
+            logger.debug(f"DEBUG: model_dump_result value: {model_dump_result}")
+
+            # FastMCP returns a tuple of (content, metadata) for some tools
+            # We need to extract the actual content for the JSONRPCResponse
+            if isinstance(model_dump_result, tuple) and len(model_dump_result) > 0:
+                logger.debug(f"DEBUG: model_dump_result is a tuple, extracting content")
+                # If the first element is a list with content items, use that
+                if isinstance(model_dump_result[0], list):
+                    logger.debug(f"DEBUG: Using first element of tuple as content")
+                    response_content = {"content": model_dump_result[0]}
+                else:
+                    logger.debug(f"DEBUG: Using entire tuple as content")
+                    response_content = {"content": list(model_dump_result)}
+            else:
+                logger.debug(f"DEBUG: model_dump_result is not a tuple, using as-is")
+                response_content = model_dump_result
+        else:
+            logger.debug(f"DEBUG: result doesn't have model_dump, checking if it's a tuple")
+            # Check if the result itself is a tuple (which seems to be the case based on logs)
+            if isinstance(result, tuple) and len(result) > 0:
+                logger.debug(f"DEBUG: result is a tuple with {len(result)} elements")
+                logger.debug(f"DEBUG: result[0] type: {type(result[0])}")
+                logger.debug(f"DEBUG: result[0] value: {result[0]}")
+                logger.debug(f"DEBUG: result[1] type: {type(result[1])}")
+                logger.debug(f"DEBUG: result[1] value: {result[1]}")
+
+                # Based on the logs, result[1] contains the actual data we want
+                if len(result) > 1 and isinstance(result[1], dict):
+                    logger.debug(f"DEBUG: Using second element of tuple as response content")
+                    # Check if the dictionary has a 'result' key (which contains the actual data)
+                    if "result" in result[1]:
+                        logger.debug(f"DEBUG: Extracting data from 'result' key in second element")
+                        # MCP protocol expects the response to have a 'content' field
+                        # The content should be a list of TextContent objects
+                        response_content = {
+                            "content": result[0]  # Use the TextContent list from the first element
+                        }
+                    else:
+                        logger.debug(f"DEBUG: Using entire second element as response content")
+                        # Still structure it properly for MCP protocol
+                        response_content = {
+                            "content": result[0]  # Use the TextContent list from the first element
+                        }
+                else:
+                    logger.debug(f"DEBUG: Using first element of tuple as response content")
+                    response_content = {"content": result[0]}
+            else:
+                logger.debug(f"DEBUG: result is not a tuple, using as-is")
+                response_content = result
+
+        response = JSONRPCResponse(
+            jsonrpc="2.0",
+            id=tool_call_id,
+            result=response_content,
+        )
+
+        return response.model_dump(by_alias=True, mode="json", exclude_none=True)
 
     async def _handle_mcp_message(
         self, session_id: str, request_data: Dict[str, Any]
@@ -351,6 +448,11 @@ class TornadoSessionManager:
         """
         method = request_data.get("method")
         request_id = request_data.get("id")
+
+        # DEBUG: Log the request data and id to diagnose the issue
+        logger.debug(f"DEBUG: _handle_mcp_message called with request_data: {request_data}")
+        logger.debug(f"DEBUG: request_id extracted: {request_id} (type: {type(request_id)})")
+        logger.debug(f"DEBUG: 'id' key exists in request_data: {'id' in request_data}")
 
         # Store event if event store is available
         if self.event_store:
@@ -369,73 +471,54 @@ class TornadoSessionManager:
                 "capabilities": {"tools": {"listChanged": True}},
                 "serverInfo": {"name": "jupyter-collaboration-mcp", "version": "0.1.0"},
             }
-            response = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": result,
-            }
-            return response
+            response = JSONRPCResponse(
+                jsonrpc="2.0",
+                id=request_id,
+                result=result,
+            )
+            return response.model_dump(by_alias=True, mode="json", exclude_none=True)
 
         # Handle tools/list request
         elif method == "tools/list":
-            result = {
-                "tools": [
-                    {
-                        "name": "list_notebooks",
-                        "description": "List available notebooks for collaboration",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "Path filter for notebooks",
-                                }
-                            },
-                        },
-                    },
-                    {
-                        "name": "get_notebook",
-                        "description": "Get a notebook's content",
-                        "inputSchema": {
-                            "type": "object",
-                            "required": ["path"],
-                            "properties": {
-                                "path": {"type": "string", "description": "Path to the notebook"},
-                                "include_collaboration_state": {
-                                    "type": "boolean",
-                                    "description": "Include collaboration state",
-                                    "default": True,
-                                },
-                            },
-                        },
-                    },
-                    {
-                        "name": "create_notebook_session",
-                        "description": "Create or retrieve a collaboration session for a notebook",
-                        "inputSchema": {
-                            "type": "object",
-                            "required": ["path"],
-                            "properties": {
-                                "path": {"type": "string", "description": "Path to the notebook"}
-                            },
-                        },
-                    },
-                ]
-            }
-            response = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": result,
-            }
-            return response
+            # Use FastMCP's built-in tool listing
+            tools: list[types.Tool] = await self.fastmcp.list_tools()
+
+            # Convert to the expected format
+            tool_list = []
+            for tool in tools:
+                tool_info = {
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "inputSchema": tool.inputSchema,
+                }
+                # Add optional fields if they exist
+                if tool.title:
+                    tool_info["title"] = tool.title
+                tool_list.append(tool_info)
+
+            result = {"tools": tool_list}
+            response = JSONRPCResponse(
+                jsonrpc="2.0",
+                id=request_id,
+                result=result,
+            )
+            return response.model_dump(by_alias=True, mode="json", exclude_none=True)
 
         # For other methods, just return a basic response
-        response = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": {"status": "ok"},
-        }
-        return response
+        # Check if this is a notification (no id field) - notifications don't get responses
+        if request_id is None:
+            logger.debug(f"DEBUG: Received notification '{method}' - no response needed")
+            return {}  # Return empty dict for notifications
+
+        logger.debug(
+            f"DEBUG: Creating JSONRPCResponse with id: {request_id} (type: {type(request_id)})"
+        )
+        response = JSONRPCResponse(
+            jsonrpc="2.0",
+            id=request_id,
+            result={"status": "ok"},
+        )
+        return response.model_dump(by_alias=True, mode="json", exclude_none=True)
 
     def _get_or_create_session_id(self, request_handler: RequestHandler) -> str:
         """Get existing session ID or create a new one."""

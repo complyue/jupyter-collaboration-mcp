@@ -57,6 +57,16 @@ After analyzing the project structure and requirements, we recommend implementin
 4. **Independent Development**: Can follow its own release cycle independent of the main collaboration project
 5. **Clear Separation of Concerns**: The main project focuses on RTC, while the new extension focuses on AI agent integration
 
+### FastMCP-Based Implementation
+
+The implementation uses **FastMCP** - a high-level wrapper around the MCP protocol that provides a more declarative and Pythonic way to define tools and resources. This approach offers several advantages over the low-level MCP server API:
+
+1. **Declarative Tool Definition**: Tools are defined using Python decorators, making the code more readable and maintainable
+2. **Automatic Schema Generation**: FastMCP automatically generates JSON schemas for tool inputs based on function signatures
+3. **Type Safety**: Leverages Python type hints for better type checking and validation
+4. **Modular Organization**: Tools are organized into logical groups (notebook, document, awareness) for better code organization
+5. **Simplified Registration**: Tool registration is handled automatically by the FastMCP framework
+
 ### Proposed Extension Structure
 
 ```
@@ -797,7 +807,7 @@ jupyter-collaboration-mcp/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── app.py              # Main MCP server application
-│   ├── handlers.py         # MCP request handlers
+│   ├── tools.py           # MCP tool definitions using FastMCP
 │   ├── rtc_adapter.py      # Adapter to existing RTC functionality
 │   ├── event_store.py     # For resumability
 │   ├── auth.py            # Authentication and authorization
@@ -805,350 +815,157 @@ jupyter-collaboration-mcp/
 └── tests/
     ├── __init__.py
     ├── test_app.py
-    ├── test_handlers.py
+    ├── test_tools.py
     └── test_auth.py
 ```
-
 #### 1.2 Set Up Dependencies
-```toml
-# pyproject.toml
-[project]
-name = "jupyter-collaboration-mcp"
-version = "0.1.0"
-description = "MCP server for Jupyter Collaboration features"
-dependencies = [
-    "jupyter-server>=2.0.0",
-    "jupyter-collaboration>=2.0.0",
-    "mcp>=1.0.0",
-    "starlette>=0.27.0",
-    "uvicorn>=0.23.0",
-    "pydantic>=2.0.0",
-    "anyio>=4.0.0",
-]
-```
+The project depends on core Jupyter and MCP packages:
+- jupyter-server: For Jupyter server functionality
+- jupyter-collaboration: For real-time collaboration features (includes YDoc support)
+- mcp: For the Model Context Protocol server implementation
+- pydantic: For data validation and serialization
 
-#### 1.3 Implement Core MCP Server
-```python
-# jupyter_collaboration_mcp/app.py
-import logging
-from typing import AsyncIterator
+#### 1.3 Implement Core MCP Server with FastMCP
+The MCP server is implemented using FastMCP, which provides a high-level, declarative approach to defining MCP tools. The server is initialized with a name and description, and tools are registered using Python decorators. The server handles HTTP requests with Server-Sent Events (SSE) for real-time communication with AI agents.
 
-import anyio
-import mcp.types as types
-from mcp.server.lowlevel import Server
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from starlette.applications import Starlette
-from starlette.routing import Mount
-
-from .event_store import InMemoryEventStore
-from .auth import authenticate_mcp_request
-from .rtc_adapter import RTCAdapter
-
-logger = logging.getLogger(__name__)
-
-class MCPServer:
-    def __init__(self):
-        self.server = Server("jupyter-collaboration-mcp")
-        self.rtc_adapter = RTCAdapter()
-        self.event_store = InMemoryEventStore()
-        self.session_manager = None
-        self._setup_handlers()
-    
-    def _setup_handlers(self):
-        # Register all MCP tools
-        self._register_notebook_tools()
-        self._register_document_tools()
-        self._register_awareness_tools()
-    
-    def create_app(self):
-        """Create the Starlette application with MCP endpoints."""
-        self.session_manager = StreamableHTTPSessionManager(
-            app=self.server,
-            event_store=self.event_store,
-        )
-        
-        async def handle_mcp_request(scope, receive, send):
-            # Authenticate the request
-            user = await authenticate_mcp_request(scope)
-            # Add user to context for handlers
-            scope["user"] = user
-            await self.session_manager.handle_request(scope, receive, send)
-        
-        app = Starlette(
-            routes=[
-                Mount("/mcp", app=handle_mcp_request),
-            ],
-        )
-        return app
-```
-
+Authentication is implemented as middleware that validates tokens from Jupyter's authentication system. The server integrates with Jupyter's extension system to be loaded as a server extension.
 ### Phase 2: RTC Adapter Implementation
 
 #### 2.1 Create RTC Adapter Class
-```python
-# jupyter_collaboration_mcp/rtc_adapter.py
-import asyncio
-from typing import Dict, Any, Optional
+The RTC Adapter serves as a bridge between MCP requests and Jupyter Collaboration functionality. It initializes with the Jupyter server application and accesses the YDoc extension that provides real-time collaboration capabilities.
 
-from jupyter_server_ydoc.app import YDocExtension
+The adapter is responsible for:
+- Initializing the connection to Jupyter's collaboration system
+- Translating MCP tool requests into operations on YDoc documents
+- Managing document sessions and collaboration state
+- Providing access to user presence and awareness information
 
-class RTCAdapter:
-    """Adapter between MCP requests and Jupyter Collaboration functionality."""
-    
-    def __init__(self):
-        self.ydoc_extension: Optional[YDocExtension] = None
-        self._initialized = False
-    
-    async def initialize(self, server_app):
-        """Initialize the adapter with the Jupyter server application."""
-        if self._initialized:
-            return
-        
-        # Get the YDocExtension from the server app
-        for extension in server_app.extension_manager.extensions:
-            if isinstance(extension, YDocExtension):
-                self.ydoc_extension = extension
-                break
-        
-        if not self.ydoc_extension:
-            raise RuntimeError("YDocExtension not found")
-        
-        self._initialized = True
-    
-    async def get_document(self, path: str, content_type: str, file_format: str):
-        """Get a document from the collaboration system."""
-        if not self._initialized:
-            raise RuntimeError("RTCAdapter not initialized")
-        
-        return await self.ydoc_extension.get_document(
-            path=path,
-            content_type=content_type,
-            file_format=file_format,
-        )
-    
-    async def list_available_documents(self, path_filter: str = None):
-        """List available documents for collaboration."""
-        # Implementation would query the file system and collaboration state
-        pass
-    
-    # Additional methods for all MCP operations...
-```
+Key methods include document retrieval, document listing, session management, and user activity tracking. The adapter ensures that all MCP operations are properly synchronized with the underlying YDoc CRDT system.
+### Phase 3: MCP Tools Implementation
 
-### Phase 3: MCP Handlers Implementation
+#### 3.1 Implement Tools with FastMCP
 
-#### 3.1 Implement Notebook Handlers
-```python
-# jupyter_collaboration_mcp/handlers.py
-import json
-from typing import List, Dict, Any
+The implementation uses FastMCP, which provides a high-level, declarative approach to defining MCP tools. Instead of manually handling tool registration and request routing, FastMCP uses Python decorators to automatically register tools and generate their schemas.
 
-import mcp.types as types
-from mcp.server.lowlevel import Server
+Tools are defined as async functions with the `@fastmcp.tool()` decorator, which includes:
+- A descriptive name for the tool
+- A clear description of what the tool does
+- Type-hinted parameters for automatic schema generation
+- Comprehensive docstrings with parameter descriptions and examples
 
-from .rtc_adapter import RTCAdapter
+Each tool returns structured data that FastMCP automatically formats into the appropriate MCP response format.
 
-class NotebookHandlers:
-    def __init__(self, server: Server, rtc_adapter: RTCAdapter):
-        self.server = server
-        self.rtc_adapter = rtc_adapter
-        self._register_handlers()
-    
-    def _register_handlers(self):
-        @self.server.call_tool()
-        async def get_notebook(name: str, arguments: Dict[str, Any]) -> List[types.ContentBlock]:
-            if name != "get_notebook":
-                raise ValueError(f"Unknown tool: {name}")
-            
-            path = arguments.get("path")
-            if not path:
-                raise ValueError("Path is required")
-            
-            document = await self.rtc_adapter.get_document(path, "notebook", "json")
-            if not document:
-                return [types.TextContent(type="text", text=f"Notebook not found: {path}")]
-            
-            # Convert document to JSON representation
-            notebook_content = document.to_json()
-            
-            return [types.TextContent(
-                type="text",
-                text=json.dumps(notebook_content, indent=2)
-            )]
-        
-        # Register other notebook tools...
-```
+#### 3.2 Tool Categories
 
+The tools are organized into three main categories:
+
+1. **Notebook Tools**: Handle notebook-specific operations
+   - `list_notebooks`: Lists available notebooks for collaboration
+   - `get_notebook`: Retrieves notebook content with collaboration metadata
+   - `create_notebook_session`: Creates or retrieves collaboration sessions
+   - Additional tools for cell manipulation and execution
+
+2. **Document Tools**: Handle general document operations
+   - `list_documents`: Lists available documents for collaboration
+   - `get_document`: Retrieves document content with collaboration metadata
+   - `update_document`: Updates document content with real-time synchronization
+   - Additional tools for text manipulation, versioning, and forking
+
+3. **Awareness Tools**: Handle user presence and collaboration awareness
+   - `get_online_users`: Retrieves list of online users
+   - `get_user_cursors`: Gets cursor positions of users in documents
+   - `update_cursor_position`: Updates current user's cursor position
+   - Additional tools for user activity tracking and session management
+
+#### 3.3 Tool Implementation Pattern
+
+Each tool follows a consistent implementation pattern:
+1. Validate input parameters
+2. Call the appropriate RTC adapter method
+3. Format the response for AI agent consumption
+4. Handle errors appropriately with meaningful messages
+
+The tools are designed to be discoverable and self-documenting, with clear descriptions and comprehensive docstrings that explain their purpose, parameters, return values, and usage examples.
+
+#### 3.4 Integration with MCP Server
+
+The tools are automatically registered with the MCP server through the FastMCP framework. The server imports the tools module and uses the decorated functions to handle incoming MCP requests. The framework handles request routing, parameter validation, response formatting, and error handling, allowing developers to focus on the business logic of each tool.
 ### Phase 4: Authentication and Event Store
 
 #### 4.1 Implement Authentication
-```python
-# jupyter_collaboration_mcp/auth.py
-from typing import Optional
 
-from jupyter_server.auth import AuthorizedAsyncHandler
-from tornado.web import HTTPError
+Authentication is implemented using Jupyter's existing token-based authentication system. The MCP server validates incoming requests by checking for a valid token in the Authorization header. The token must match the one provided when starting Jupyter with the `--IdentityProvider.token` option.
 
-async def authenticate_mcp_request(scope) -> Optional[Dict[str, Any]]:
-    """Authenticate an MCP request using a simple token."""
-    # Extract token from headers
-    headers = dict(scope.get("headers", []))
-    auth_header = headers.get(b"authorization", b"").decode()
-    
-    if not auth_header or not auth_header.startswith("Identity.token "):
-        raise HTTPError(401, "Missing or invalid authentication header")
-    
-    token = auth_header[15:]  # Remove "Identity.token " prefix
-    
-    # Check rate limit
-    client_id = headers.get(b"x-forwarded-for", b"").decode() or "unknown"
-    if not check_rate_limit(client_id):
-        raise HTTPError(429, "Rate limit exceeded")
-    
-    # Verify token
-    if not verify_token(token):
-        raise HTTPError(401, "Invalid token")
-    
-    # Return basic user claims
-    return {
-        "sub": "user",
-        "admin": True
-    }
-```
+Key aspects of the authentication implementation:
+- Token extraction from HTTP headers
+- Token validation against Jupyter's authentication system
+- Rate limiting to prevent abuse
+- Integration with Jupyter's user identity system
+- Proper error handling for authentication failures
+
+The authentication middleware ensures that only authorized users can access MCP endpoints and that user identity is properly propagated to the tool functions.
 
 #### 4.2 Implement Event Store
-```python
-# jupyter_collaboration_mcp/event_store.py
-from collections import deque
-from dataclasses import dataclass
-from uuid import uuid4
 
-from mcp.server.streamable_http import EventStore, EventId, EventMessage, StreamId
+The event store provides resumability and state management for the MCP server. It maintains a history of events that can be replayed when clients reconnect, ensuring they don't miss any updates during disconnections.
 
-@dataclass
-class EventEntry:
-    event_id: EventId
-    stream_id: StreamId
-    message: Dict[str, Any]
+Key features of the event store implementation:
+- In-memory storage of events with configurable retention limits
+- Event indexing for efficient retrieval
+- Stream-based organization to separate events by document or session
+- Automatic cleanup of old events to manage memory usage
+- Support for event replay after disconnections
 
-class InMemoryEventStore(EventStore):
-    """In-memory event store for resumability."""
-    
-    def __init__(self, max_events_per_stream: int = 100):
-        self.max_events_per_stream = max_events_per_stream
-        self.streams: Dict[StreamId, deque[EventEntry]] = {}
-        self.event_index: Dict[EventId, EventEntry] = {}
-    
-    async def store_event(self, stream_id: StreamId, message: Dict[str, Any]) -> EventId:
-        event_id = str(uuid4())
-        event_entry = EventEntry(event_id=event_id, stream_id=stream_id, message=message)
-        
-        if stream_id not in self.streams:
-            self.streams[stream_id] = deque(maxlen=self.max_events_per_stream)
-        
-        # Handle deque full case
-        if len(self.streams[stream_id]) == self.max_events_per_stream:
-            oldest_event = self.streams[stream_id][0]
-            self.event_index.pop(oldest_event.event_id, None)
-        
-        self.streams[stream_id].append(event_entry)
-        self.event_index[event_id] = event_entry
-        
-        return event_id
-    
-    async def replay_events_after(self, last_event_id: EventId, send_callback):
-        # Implementation similar to the MCP example
-        pass
-```
-
+The event store works with the Server-Sent Events (SSE) mechanism to provide real-time updates to AI agents while maintaining the ability to resume sessions after interruptions.
 ### Phase 5: Testing and Documentation
 
 #### 5.1 Write Tests
-```python
-# tests/test_handlers.py
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 
-from jupyter_collaboration_mcp.handlers import NotebookHandlers
-from jupyter_collaboration_mcp.rtc_adapter import RTCAdapter
+Comprehensive testing is essential to ensure the reliability and correctness of the MCP server implementation. The test suite covers:
 
-@pytest.mark.asyncio
-async def test_get_notebook():
-    # Mock the RTC adapter
-    rtc_adapter = MagicMock(spec=RTCAdapter)
-    rtc_adapter.get_document = AsyncMock(return_value=MagicMock())
-    rtc_adapter.get_document.return_value.to_json.return_value = {
-        "cells": [{"cell_type": "code", "source": "print('hello')"}]
-    }
-    
-    # Create server and handlers
-    server = MagicMock()
-    handlers = NotebookHandlers(server, rtc_adapter)
-    
-    # Test the handler
-    result = await handlers.server.call_tool()(
-        name="get_notebook",
-        arguments={"path": "/example.ipynb"}
-    )
-    
-    assert len(result) == 1
-    assert result[0].type == "text"
-    assert "print('hello')" in result[0].text
-```
+- Unit tests for individual tool functions, mocking the RTC adapter to test input validation, error handling, and response formatting
+- Integration tests for the MCP server, testing the complete request/response flow with realistic scenarios
+- Authentication tests, verifying that token validation and rate limiting work correctly
+- Event store tests, ensuring that events are properly stored, retrieved, and replayed
+- Concurrency tests, validating that multiple simultaneous requests are handled correctly
+
+Tests use pytest with async support for testing the asynchronous tool functions. Mock objects are used extensively to isolate the code under test from external dependencies.
 
 #### 5.2 Create Documentation
-- **API Documentation**: Detailed documentation of all MCP endpoints
-- **Integration Guide**: How to integrate AI agents with the MCP server
-- **Examples**: Sample code for common use cases
-- **Deployment Guide**: Instructions for deploying the MCP server
 
+Comprehensive documentation is created to support both users and developers:
+
+- **API Documentation**: Detailed descriptions of all MCP tools, including their parameters, return values, and usage examples
+- **Integration Guide**: Step-by-step instructions for integrating AI agents with the MCP server, including authentication setup and connection configuration
+- **Examples**: Practical examples showing how to use the MCP tools for common scenarios like collaborative editing, document analysis, and session management
+- **Deployment Guide**: Instructions for deploying the MCP server in different environments, including configuration options and security considerations
+- **Developer Guide**: Information for contributors on how to extend the MCP server with new tools and features
 ### Phase 6: Deployment and Integration
 
 #### 6.1 Package and Distribute
-```python
-# setup.py
-from setuptools import setup, find_packages
 
-setup(
-    name="jupyter-collaboration-mcp",
-    version="0.1.0",
-    packages=find_packages(),
-    install_requires=[
-        "jupyter-server>=2.0.0",
-        "jupyter-collaboration>=2.0.0",
-        # ... other dependencies
-    ],
-    entry_points={
-        "console_scripts": [
-            "jupyter-collaboration-mcp=jupyter_collaboration_mcp.__main__:main",
-        ],
-    },
-)
-```
+The MCP server is packaged as a standard Python package using pyproject.toml for configuration. The package includes:
+
+- The core MCP server implementation
+- Tool definitions for notebook, document, and awareness operations
+- RTC adapter for integration with Jupyter Collaboration
+- Authentication and event store components
+- Test suite and documentation
+
+The package is distributed via PyPI and can be installed using pip. It includes entry points for both standalone execution and Jupyter server extension integration.
 
 #### 6.2 Jupyter Server Extension Integration
-```python
-# jupyter_collaboration_mcp/__init__.py
-def _load_jupyter_server_extension(server_app):
-    """Load the MCP server as a Jupyter server extension."""
-    from .app import MCPServer
-    
-    # Create and configure the MCP server
-    mcp_server = MCPServer()
-    app = mcp_server.create_app()
-    
-    # Add the MCP server to the Jupyter server app
-    server_app.web_app.add_handlers(
-        host_pattern=r".*",
-        handler_tuples=[(r"/mcp/.*", app)]
-    )
-    
-    # Initialize the RTC adapter
-    server_app.ioloop.add_callback(
-        mcp_server.rtc_adapter.initialize,
-        server_app
-    )
-```
 
+The MCP server integrates with Jupyter as a server extension, automatically loading when Jupyter starts. The integration process involves:
+
+- Registering the MCP server with Jupyter's extension system
+- Setting up HTTP routes for MCP endpoints
+- Initializing the RTC adapter with Jupyter's collaboration system
+- Configuring authentication to use Jupyter's token system
+
+Once integrated, the MCP server runs alongside Jupyter, providing MCP endpoints that AI agents can connect to for real-time collaboration features. The server leverages Jupyter's existing infrastructure for authentication, authorization, and document management.
+
+The extension can be enabled or disabled through Jupyter's configuration system, allowing administrators to control access to MCP functionality.
 ## Benefits
 
 1. **Modularity**: Keeps MCP functionality separate from core collaboration features
