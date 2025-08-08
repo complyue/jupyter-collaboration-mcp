@@ -129,7 +129,12 @@ class RTCAdapter:
         return {"session_id": session_id, "room_id": room_id, "path": path, "status": "active"}
 
     async def update_notebook_cell(
-        self, path: str, cell_id: str, content: str, cell_type: Optional[str] = None, exec: bool = True
+        self,
+        path: str,
+        cell_id: str,
+        content: str,
+        cell_type: Optional[str] = None,
+        exec: bool = True,
     ) -> Dict[str, Any]:
         """Update a notebook cell's content."""
         try:
@@ -139,7 +144,7 @@ class RTCAdapter:
 
             # Update the cell content
             await room.update_cell(cell_id, content, cell_type)
-            
+
             # Execute the cell if requested
             exec_result = None
             if exec:
@@ -148,7 +153,7 @@ class RTCAdapter:
                 except Exception as exec_e:
                     logger.warning(f"Error executing cell {cell_id} after update", exc_info=True)
                     exec_result = {"error": str(exec_e)}
-            
+
             return {
                 "success": True,
                 "cell_id": cell_id,
@@ -171,7 +176,7 @@ class RTCAdapter:
 
             # Insert the new cell
             cell_id = await room.insert_cell(content, position, cell_type)
-            
+
             # Execute the cell if requested
             exec_result = None
             if exec:
@@ -180,7 +185,7 @@ class RTCAdapter:
                 except Exception as exec_e:
                     logger.warning(f"Error executing cell {cell_id} after insertion", exc_info=True)
                     exec_result = {"error": str(exec_e)}
-            
+
             return {
                 "success": True,
                 "cell_id": cell_id,
@@ -193,7 +198,9 @@ class RTCAdapter:
             logger.error(f"Error inserting notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
-    async def delete_notebook_cell(self, path: str, cell_id: str, exec: bool = True) -> Dict[str, Any]:
+    async def delete_notebook_cell(
+        self, path: str, cell_id: str, exec: bool = True
+    ) -> Dict[str, Any]:
         """Delete a cell from a notebook."""
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
