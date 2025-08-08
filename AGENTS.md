@@ -106,7 +106,7 @@ The server exposes the following MCP tools for user awareness:
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Jupyter Server 2.0.0 or higher
 - Jupyter Collaboration 2.0.0 or higher
 

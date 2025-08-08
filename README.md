@@ -19,7 +19,7 @@ This project enables AI agents to interact with collaborative Jupyter notebooks 
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Jupyter Server 2.0.0 or higher
 - Jupyter Collaboration 2.0.0 or higher
 
@@ -136,7 +136,7 @@ The server exposes the following MCP tools:
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Git
 - Node.js (for JupyterLab extension development, if needed)
 
