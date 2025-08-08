@@ -129,7 +129,7 @@ class RTCAdapter:
         return {"session_id": session_id, "room_id": room_id, "path": path, "status": "active"}
 
     async def update_notebook_cell(
-        self, path: str, cell_id: str, content: str, cell_type: Optional[str] = None
+        self, path: str, cell_id: str, content: str, cell_type: Optional[str] = None, exec: bool = True
     ) -> Dict[str, Any]:
         """Update a notebook cell's content."""
         try:
@@ -139,17 +139,29 @@ class RTCAdapter:
 
             # Update the cell content
             await room.update_cell(cell_id, content, cell_type)
+            
+            # Execute the cell if requested
+            exec_result = None
+            if exec:
+                try:
+                    exec_result = await room.execute_cell(cell_id, 30)
+                except Exception as exec_e:
+                    logger.warning(f"Error executing cell {cell_id} after update", exc_info=True)
+                    exec_result = {"error": str(exec_e)}
+            
             return {
                 "success": True,
                 "cell_id": cell_id,
                 "timestamp": IOLoop.current().time(),
+                "executed": exec,
+                "execution_result": exec_result,
             }
         except Exception as e:
             logger.error(f"Error updating notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def insert_notebook_cell(
-        self, path: str, content: str, position: int, cell_type: str = "code"
+        self, path: str, content: str, position: int, cell_type: str = "code", exec: bool = True
     ) -> Dict[str, Any]:
         """Insert a new cell into a notebook."""
         try:
@@ -159,22 +171,43 @@ class RTCAdapter:
 
             # Insert the new cell
             cell_id = await room.insert_cell(content, position, cell_type)
+            
+            # Execute the cell if requested
+            exec_result = None
+            if exec:
+                try:
+                    exec_result = await room.execute_cell(cell_id, 30)
+                except Exception as exec_e:
+                    logger.warning(f"Error executing cell {cell_id} after insertion", exc_info=True)
+                    exec_result = {"error": str(exec_e)}
+            
             return {
                 "success": True,
                 "cell_id": cell_id,
                 "position": position,
                 "timestamp": IOLoop.current().time(),
+                "executed": exec,
+                "execution_result": exec_result,
             }
         except Exception as e:
             logger.error(f"Error inserting notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
-    async def delete_notebook_cell(self, path: str, cell_id: str) -> Dict[str, Any]:
+    async def delete_notebook_cell(self, path: str, cell_id: str, exec: bool = True) -> Dict[str, Any]:
         """Delete a cell from a notebook."""
         try:
             room = await self.ydoc_extension.get_room(path, "notebook")
             if not room:
                 raise ValueError(f"Notebook not found: {path}")
+
+            # Execute the cell before deletion if requested
+            exec_result = None
+            if exec:
+                try:
+                    exec_result = await room.execute_cell(cell_id, 30)
+                except Exception as exec_e:
+                    logger.warning(f"Error executing cell {cell_id} before deletion", exc_info=True)
+                    exec_result = {"error": str(exec_e)}
 
             # Delete the cell
             await room.delete_cell(cell_id)
@@ -182,6 +215,8 @@ class RTCAdapter:
                 "success": True,
                 "cell_id": cell_id,
                 "timestamp": IOLoop.current().time(),
+                "executed": exec,
+                "execution_result": exec_result,
             }
         except Exception as e:
             logger.error(f"Error deleting notebook cell", exc_info=True)

@@ -113,6 +113,7 @@ Examples:
 
 Updates cells within the specified range (start_index to end_index). Can update all cells
 in the range or specific cells by ID. Changes are synchronized with all collaborators in real-time.
+Cells can be automatically executed after update using the exec parameter.
 
 Args:
   path: Path to the notebook (required)
@@ -120,14 +121,15 @@ Args:
   start_index: Starting index for range-based updates (optional)
   end_index: Ending index for range-based updates (optional)
   cell_ids: Specific cell IDs to update (optional)
+  exec: Whether to execute cells after update (default: True)
 
 Returns:
-  Description of operation results and list of update confirmations
+  Description of operation results and list of update confirmations including execution results
 
 Examples:
-• batch_update_notebook_cells(path="/projects/analysis.ipynb", start_index=0, end_index=5, updates=[{"content": "print('Updated')"}]) - Update first 5 cells
-• batch_update_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-1", "cell-3"], updates=[{"content": "print('Cell 1')"}, {"content": "print('Cell 3')"}]) - Update specific cells
-• batch_update_notebook_cells(path="/projects/analysis.ipynb", start_index=2, end_index=2, updates=[{"content": "print('Single cell')"}]) - Update single cell at index 2
+• batch_update_notebook_cells(path="/projects/analysis.ipynb", start_index=0, end_index=5, updates=[{"content": "print('Updated')"}]) - Update and execute first 5 cells
+• batch_update_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-1", "cell-3"], updates=[{"content": "print('Cell 1')"}, {"content": "print('Cell 3')}], exec=False) - Update specific cells without execution
+• batch_update_notebook_cells(path="/projects/analysis.ipynb", start_index=2, end_index=2, updates=[{"content": "print('Single cell')"}]) - Update and execute single cell at index 2
 """
     )
     async def batch_update_notebook_cells(
@@ -136,6 +138,7 @@ Examples:
         start_index: Optional[int] = None,
         end_index: Optional[int] = None,
         cell_ids: Optional[List[str]] = None,
+        exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path or not updates:
             raise ErrorData(
@@ -160,7 +163,7 @@ Examples:
                     # This is a simplified implementation - in reality you'd get the cell IDs from the notebook
                     cell_id = f"cell-{i}"  # Placeholder
                     result = await rtc_adapter.update_notebook_cell(
-                        path, cell_id, update.get("content", ""), update.get("cell_type")
+                        path, cell_id, update.get("content", ""), update.get("cell_type"), exec
                     )
                     results.append(result)
 
@@ -170,11 +173,12 @@ Examples:
                 if i < len(updates):
                     update = updates[i]
                     result = await rtc_adapter.update_notebook_cell(
-                        path, cell_id, update.get("content", ""), update.get("cell_type")
+                        path, cell_id, update.get("content", ""), update.get("cell_type"), exec
                     )
                     results.append(result)
 
-        description = f"Updated {len(results)} cells in notebook. Changes are synchronized with all collaborators."
+        exec_status = " and executed" if exec else ""
+        description = f"Updated {len(results)} cells in notebook{exec_status}. Changes are synchronized with all collaborators."
         description += " Consider creating a collaboration session for real-time editing if not already active."
 
         return description, results
@@ -184,20 +188,22 @@ Examples:
 
 Inserts multiple cells at the specified positions. Can insert a range of cells or specific cells
 at different positions. Changes are synchronized with all collaborators in real-time.
+Cells can be automatically executed after insertion using the exec parameter.
 
 Args:
   path: Path to the notebook (required)
   cells: List of cell data, each containing content and optional cell_type
   start_position: Starting position for range-based inserts (optional)
   positions: Specific positions for each cell (optional)
+  exec: Whether to execute cells after insertion (default: True)
 
 Returns:
-  Description of operation results and list of inserted cell information
+  Description of operation results and list of inserted cell information including execution results
 
 Examples:
-• batch_insert_notebook_cells(path="/projects/analysis.ipynb", start_position=2, cells=[{"content": "print('Cell 1')"}, {"content": "print('Cell 2')"}]) - Insert 2 cells starting at position 2
-• batch_insert_notebook_cells(path="/projects/analysis.ipynb", positions=[0, 5], cells=[{"content": "print('First')"}, {"content": "print('Middle')}]) - Insert at specific positions
-• batch_insert_notebook_cells(path="/projects/analysis.ipynb", start_position=3, cells=[{"content": "print('Single cell')"}]) - Insert single cell at position 3
+• batch_insert_notebook_cells(path="/projects/analysis.ipynb", start_position=2, cells=[{"content": "print('Cell 1')"}, {"content": "print('Cell 2')"}]) - Insert and execute 2 cells starting at position 2
+• batch_insert_notebook_cells(path="/projects/analysis.ipynb", positions=[0, 5], cells=[{"content": "print('First')"}, {"content": "print('Middle')}], exec=False) - Insert cells without execution
+• batch_insert_notebook_cells(path="/projects/analysis.ipynb", start_position=3, cells=[{"content": "print('Single cell')"}]) - Insert and execute single cell at position 3
 """
     )
     async def batch_insert_notebook_cells(
@@ -205,6 +211,7 @@ Examples:
         cells: List[Dict[str, Any]],
         start_position: Optional[int] = None,
         positions: Optional[List[int]] = None,
+        exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path or not cells:
             raise ErrorData(
@@ -225,7 +232,7 @@ Examples:
             for i, cell in enumerate(cells):
                 position = start_position + i
                 result = await rtc_adapter.insert_notebook_cell(
-                    path, cell.get("content", ""), position, cell.get("cell_type", "code")
+                    path, cell.get("content", ""), position, cell.get("cell_type", "code"), exec
                 )
                 results.append(result)
 
@@ -235,11 +242,12 @@ Examples:
                 if i < len(cells):
                     cell = cells[i]
                     result = await rtc_adapter.insert_notebook_cell(
-                        path, cell.get("content", ""), position, cell.get("cell_type", "code")
+                        path, cell.get("content", ""), position, cell.get("cell_type", "code"), exec
                     )
                     results.append(result)
 
-        description = f"Inserted {len(results)} cells into notebook. Changes are synchronized with all collaborators."
+        exec_status = " and executed" if exec else ""
+        description = f"Inserted {len(results)} cells into notebook{exec_status}. Changes are synchronized with all collaborators."
         description += " Consider creating a collaboration session for real-time editing if not already active."
 
         return description, results
@@ -248,21 +256,23 @@ Examples:
         description="""Batch delete multiple cells from a notebook by range or specific IDs.
 
 Deletes cells within the specified range or specific cells by ID. The deletions are
-synchronized with all collaborators in real-time.
+synchronized with all collaborators in real-time. Cells can be executed before deletion
+using the exec parameter.
 
 Args:
   path: Path to the notebook (required)
   start_index: Starting index for range-based deletion (optional)
   end_index: Ending index for range-based deletion (optional)
   cell_ids: Specific cell IDs to delete (optional)
+  exec: Whether to execute cells before deletion (default: True)
 
 Returns:
-  Description of operation results and list of deletion confirmations
+  Description of operation results and list of deletion confirmations including execution results
 
 Examples:
-• batch_delete_notebook_cells(path="/projects/analysis.ipynb", start_index=3, end_index=5) - Delete cells from index 3 to 5
-• batch_delete_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-2", "cell-4"]) - Delete specific cells by ID
-• batch_delete_notebook_cells(path="/projects/analysis.ipynb", start_index=7, end_index=7) - Delete single cell at index 7
+• batch_delete_notebook_cells(path="/projects/analysis.ipynb", start_index=3, end_index=5) - Execute and delete cells from index 3 to 5
+• batch_delete_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-2", "cell-4"], exec=False) - Delete specific cells without execution
+• batch_delete_notebook_cells(path="/projects/analysis.ipynb", start_index=7, end_index=7) - Execute and delete single cell at index 7
 """
     )
     async def batch_delete_notebook_cells(
@@ -270,6 +280,7 @@ Examples:
         start_index: Optional[int] = None,
         end_index: Optional[int] = None,
         cell_ids: Optional[List[str]] = None,
+        exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path:
             raise ErrorData(
@@ -291,16 +302,17 @@ Examples:
                 # For range-based deletions, we need to get the cell ID first
                 # This is a simplified implementation - in reality you'd get the cell IDs from the notebook
                 cell_id = f"cell-{i}"  # Placeholder
-                result = await rtc_adapter.delete_notebook_cell(path, cell_id)
+                result = await rtc_adapter.delete_notebook_cell(path, cell_id, exec)
                 results.append(result)
 
         # Handle specific cell ID deletions
         if cell_ids:
             for cell_id in cell_ids:
-                result = await rtc_adapter.delete_notebook_cell(path, cell_id)
+                result = await rtc_adapter.delete_notebook_cell(path, cell_id, exec)
                 results.append(result)
 
-        description = f"Deleted {len(results)} cells from notebook. Changes are synchronized with all collaborators."
+        exec_status = " after execution" if exec else ""
+        description = f"Deleted {len(results)} cells from notebook{exec_status}. Changes are synchronized with all collaborators."
         description += " Consider creating a collaboration session for real-time editing if not already active."
 
         return description, results
