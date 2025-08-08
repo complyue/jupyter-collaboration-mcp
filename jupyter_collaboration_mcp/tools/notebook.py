@@ -114,6 +114,16 @@ Examples:
 Updates cells within the specified range (start_index to end_index). Can update all cells
 in the range or specific cells by ID. Changes are synchronized with all collaborators in real-time.
 
+Args:
+  path: Path to the notebook (required)
+  updates: List of update operations, each containing content and optional cell_type
+  start_index: Starting index for range-based updates (optional)
+  end_index: Ending index for range-based updates (optional)
+  cell_ids: Specific cell IDs to update (optional)
+
+Returns:
+  Description of operation results and list of update confirmations
+
 Examples:
 • batch_update_notebook_cells(path="/projects/analysis.ipynb", start_index=0, end_index=5, updates=[{"content": "print('Updated')"}]) - Update first 5 cells
 • batch_update_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-1", "cell-3"], updates=[{"content": "print('Cell 1')"}, {"content": "print('Cell 3')"}]) - Update specific cells
@@ -127,18 +137,6 @@ Examples:
         end_index: Optional[int] = None,
         cell_ids: Optional[List[str]] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        """Batch update multiple notebook cells.
-
-        Args:
-            path: Path to the notebook (required)
-            updates: List of update operations, each containing content and optional cell_type
-            start_index: Starting index for range-based updates (optional)
-            end_index: Ending index for range-based updates (optional)
-            cell_ids: Specific cell IDs to update (optional)
-
-        Returns:
-            Description of operation results and list of update confirmations
-        """
         if not path or not updates:
             raise ErrorData(
                 code=INVALID_PARAMS,
@@ -187,6 +185,15 @@ Examples:
 Inserts multiple cells at the specified positions. Can insert a range of cells or specific cells
 at different positions. Changes are synchronized with all collaborators in real-time.
 
+Args:
+  path: Path to the notebook (required)
+  cells: List of cell data, each containing content and optional cell_type
+  start_position: Starting position for range-based inserts (optional)
+  positions: Specific positions for each cell (optional)
+
+Returns:
+  Description of operation results and list of inserted cell information
+
 Examples:
 • batch_insert_notebook_cells(path="/projects/analysis.ipynb", start_position=2, cells=[{"content": "print('Cell 1')"}, {"content": "print('Cell 2')"}]) - Insert 2 cells starting at position 2
 • batch_insert_notebook_cells(path="/projects/analysis.ipynb", positions=[0, 5], cells=[{"content": "print('First')"}, {"content": "print('Middle')}]) - Insert at specific positions
@@ -199,17 +206,6 @@ Examples:
         start_position: Optional[int] = None,
         positions: Optional[List[int]] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        """Batch insert multiple notebook cells.
-
-        Args:
-            path: Path to the notebook (required)
-            cells: List of cell data, each containing content and optional cell_type
-            start_position: Starting position for range-based inserts (optional)
-            positions: Specific positions for each cell (optional)
-
-        Returns:
-            Description of operation results and list of inserted cell information
-        """
         if not path or not cells:
             raise ErrorData(
                 code=INVALID_PARAMS,
@@ -254,6 +250,15 @@ Examples:
 Deletes cells within the specified range or specific cells by ID. The deletions are
 synchronized with all collaborators in real-time.
 
+Args:
+  path: Path to the notebook (required)
+  start_index: Starting index for range-based deletion (optional)
+  end_index: Ending index for range-based deletion (optional)
+  cell_ids: Specific cell IDs to delete (optional)
+
+Returns:
+  Description of operation results and list of deletion confirmations
+
 Examples:
 • batch_delete_notebook_cells(path="/projects/analysis.ipynb", start_index=3, end_index=5) - Delete cells from index 3 to 5
 • batch_delete_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-2", "cell-4"]) - Delete specific cells by ID
@@ -266,17 +271,6 @@ Examples:
         end_index: Optional[int] = None,
         cell_ids: Optional[List[str]] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        """Batch delete multiple notebook cells.
-
-        Args:
-            path: Path to the notebook (required)
-            start_index: Starting index for range-based deletion (optional)
-            end_index: Ending index for range-based deletion (optional)
-            cell_ids: Specific cell IDs to delete (optional)
-
-        Returns:
-            Description of operation results and list of deletion confirmations
-        """
         if not path:
             raise ErrorData(
                 code=INVALID_PARAMS,
@@ -317,6 +311,16 @@ Examples:
 Executes cells within the specified range or specific cells by ID. The execution is
 visible to all collaborators in real-time. Use timeout to control execution time.
 
+Args:
+  path: Path to the notebook (required)
+  start_index: Starting index for range-based execution (optional)
+  end_index: Ending index for range-based execution (optional)
+  cell_ids: Specific cell IDs to execute (optional)
+  timeout: Execution timeout in seconds (default: 30)
+
+Returns:
+  Description of operation results and list of execution results
+
 Examples:
 • batch_execute_notebook_cells(path="/projects/analysis.ipynb", start_index=0, end_index=3) - Execute first 4 cells
 • batch_execute_notebook_cells(path="/projects/analysis.ipynb", cell_ids=["cell-1", "cell-5"], timeout=60) - Execute specific cells with custom timeout
@@ -330,18 +334,6 @@ Examples:
         cell_ids: Optional[List[str]] = None,
         timeout: int = 30,
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        """Batch execute multiple notebook cells.
-
-        Args:
-            path: Path to the notebook (required)
-            start_index: Starting index for range-based execution (optional)
-            end_index: Ending index for range-based execution (optional)
-            cell_ids: Specific cell IDs to execute (optional)
-            timeout: Execution timeout in seconds (default: 30)
-
-        Returns:
-            Description of operation results and list of execution results
-        """
         if not path:
             raise ErrorData(
                 code=INVALID_PARAMS,
