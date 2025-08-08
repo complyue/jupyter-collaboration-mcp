@@ -33,7 +33,7 @@ class RTCAdapter:
 
     # Notebook operations
 
-    async def list_notebooks(self, path_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def list_notebooks(self, path_prefix: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available notebooks for collaboration."""
         try:
             # Get the contents manager from the server app
@@ -79,7 +79,7 @@ class RTCAdapter:
                     await process_contents(item)
 
             # Apply filters and sort
-            filtered_notebooks = self._filter_and_sort_items(notebooks, path_filter)
+            filtered_notebooks = self._filter_and_sort_items(notebooks, path_prefix)
             return filtered_notebooks
 
         except Exception as e:
@@ -211,7 +211,7 @@ class RTCAdapter:
     # Document operations
 
     async def list_documents(
-        self, path_filter: Optional[str] = None, file_type: Optional[str] = None
+        self, path_prefix: Optional[str] = None, file_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """List available documents for collaboration."""
         try:
@@ -263,7 +263,7 @@ class RTCAdapter:
                     await process_contents(item)
 
             # Apply filters and sort
-            documents = self._filter_and_sort_items(documents, path_filter)
+            documents = self._filter_and_sort_items(documents, path_prefix)
 
             # Apply file type filter if provided
             if file_type:
@@ -815,12 +815,12 @@ class RTCAdapter:
         return 0
 
     def _filter_and_sort_items(
-        self, items: List[Dict[str, Any]], path_filter: Optional[str] = None
+        self, items: List[Dict[str, Any]], path_prefix: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Apply path filter and sort items by last modified date."""
-        # Apply path filter if provided
-        if path_filter:
-            items = [item for item in items if path_filter in item["path"]]
+        """Apply path prefix filter and sort items by last modified date."""
+        # Apply path prefix filter if provided
+        if path_prefix:
+            items = [item for item in items if item["path"].startswith(path_prefix)]
 
         # Sort by last modified date (newest first)
         items.sort(key=lambda x: x["last_modified"], reverse=True)

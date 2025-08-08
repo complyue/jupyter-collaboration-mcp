@@ -4,11 +4,8 @@ __all__ = [
     "define_awareness_tools",
 ]
 
-import json
-import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Tuple, Dict, List, Optional
 
-import mcp.types as types
 from mcp.server import FastMCP
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
 
@@ -19,31 +16,37 @@ def define_notebook_tools(fastmcp: FastMCP, rtc_adapter: RTCAdapter):
     """Define all notebook collaboration tools using fastmcp."""
 
     @fastmcp.tool(
-        description="List available notebooks for collaboration. Returns a list of notebook paths with collaboration status.",
+        description="""List available notebooks for collaboration.
+
+This tool allows AI agents to discover notebooks that are available for 
+real-time collaboration. Returns a tuple containing:
+- A description string summarizing the results
+- A list of notebook info objects with paths and collaboration status
+
+Parameters:
+- path_prefix (Optional[str]): Limit results to paths starting with this prefix
+- max_results (Optional[int]): Maximum number of notebooks to return
+
+Examples:
+• list_notebooks() - List all notebooks
+• list_notebooks(path_prefix='/projects/data-science/') - List notebooks in a specific directory
+• list_notebooks(max_results=5) - List at most 5 notebooks
+"""
     )
-    async def list_notebooks(path_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        List available notebooks for collaboration.
+    async def list_notebooks(
+        path_prefix: Optional[str] = None,
+        max_results: Optional[int] = None,
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        notebooks = await rtc_adapter.list_notebooks(path_prefix)
 
-        This tool allows AI agents to discover notebooks that are available for
-        real-time collaboration. It returns a list of notebook paths along with
-        their collaboration status.
+        # Apply max_results limit if specified
+        if max_results is not None and len(notebooks) > max_results:
+            description = f"Found {len(notebooks)} notebooks (showing first {max_results} results)"
+            notebooks = notebooks[:max_results]
+        else:
+            description = f"Found {len(notebooks)} notebooks available for collaboration"
 
-        Args:
-            path_filter: Optional path filter to limit results to a specific directory
-
-        Returns:
-            List of notebooks with their paths and collaboration status
-
-        Example:
-            # List all notebooks
-            notebooks = await list_notebooks()
-
-            # List notebooks in a specific directory
-            notebooks = await list_notebooks(path_filter="/projects/data-science/")
-        """
-        notebooks = await rtc_adapter.list_notebooks(path_filter)
-        return notebooks
+        return description, notebooks
 
     @fastmcp.tool(
         description="Get a notebook's content including cells and collaboration metadata.",
