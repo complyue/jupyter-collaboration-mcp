@@ -71,7 +71,7 @@ class RTCAdapter:
                             for item in dir_contents["content"]:
                                 await process_contents(item, dir_path)
                     except Exception as e:
-                        logger.warning(f"Error listing contents of {dir_path}: {e}")
+                        logger.warning(f"Error listing contents of {dir_path}", exc_info=True)
 
             # Process all contents
             if "content" in contents:
@@ -83,7 +83,7 @@ class RTCAdapter:
             return filtered_notebooks
 
         except Exception as e:
-            logger.error(f"Error listing notebooks: {e}")
+            logger.error(f"Error listing notebooks", exc_info=True)
             return []
 
     async def get_notebook(
@@ -106,7 +106,7 @@ class RTCAdapter:
 
             return result
         except Exception as e:
-            logger.error(f"Error getting notebook {path}: {e}")
+            logger.error(f"Error getting notebook {path}", exc_info=True)
             return None
 
     async def create_notebook_session(self, path: str) -> Dict[str, Any]:
@@ -145,7 +145,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error updating notebook cell: {e}")
+            logger.error(f"Error updating notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def insert_notebook_cell(
@@ -166,7 +166,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error inserting notebook cell: {e}")
+            logger.error(f"Error inserting notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def delete_notebook_cell(self, path: str, cell_id: str) -> Dict[str, Any]:
@@ -184,7 +184,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error deleting notebook cell: {e}")
+            logger.error(f"Error deleting notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def execute_notebook_cell(
@@ -205,7 +205,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error executing notebook cell: {e}")
+            logger.error(f"Error executing notebook cell", exc_info=True)
             return {"success": False, "error": str(e)}
 
     # Document operations
@@ -255,7 +255,7 @@ class RTCAdapter:
                             for item in dir_contents["content"]:
                                 await process_contents(item, dir_path)
                     except Exception as e:
-                        logger.warning(f"Error listing contents of {dir_path}: {e}")
+                        logger.warning(f"Error listing contents of {dir_path}", exc_info=True)
 
             # Process all contents
             if "content" in contents:
@@ -272,7 +272,7 @@ class RTCAdapter:
             return documents
 
         except Exception as e:
-            logger.error(f"Error listing documents: {e}")
+            logger.error(f"Error listing documents", exc_info=True)
             return []
 
     async def get_document(
@@ -298,7 +298,7 @@ class RTCAdapter:
 
             return result
         except Exception as e:
-            logger.error(f"Error getting document {path}: {e}")
+            logger.error(f"Error getting document {path}", exc_info=True)
             return None
 
     async def create_document_session(
@@ -351,7 +351,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error updating document: {e}")
+            logger.error(f"Error updating document", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def insert_text(self, path: str, text: str, position: int) -> Dict[str, Any]:
@@ -371,7 +371,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error inserting text: {e}")
+            logger.error(f"Error inserting text", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def delete_text(self, path: str, position: int, length: int) -> Dict[str, Any]:
@@ -392,7 +392,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error deleting text: {e}")
+            logger.error(f"Error deleting text", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def get_document_history(self, path: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -408,7 +408,7 @@ class RTCAdapter:
 
             return history
         except Exception as e:
-            logger.error(f"Error getting document history: {e}")
+            logger.error(f"Error getting document history", exc_info=True)
             return []
 
     async def restore_document_version(self, path: str, version_id: str) -> Dict[str, Any]:
@@ -428,7 +428,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error restoring document version: {e}")
+            logger.error(f"Error restoring document version", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def fork_document(
@@ -473,7 +473,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error forking document: {e}")
+            logger.error(f"Error forking document", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def merge_document_fork(self, path: str, fork_id: str) -> Dict[str, Any]:
@@ -512,7 +512,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error merging document fork: {e}")
+            logger.error(f"Error merging document fork", exc_info=True)
             return {"success": False, "error": str(e)}
 
     # Awareness operations
@@ -561,13 +561,13 @@ class RTCAdapter:
                             }
                         ]
                 except Exception as e:
-                    logger.warning(f"Error querying awareness system: {e}")
+                    logger.warning(f"Error querying awareness system", exc_info=True)
                     # Fallback to empty list
                     users = []
 
             return users
         except Exception as e:
-            logger.error(f"Error getting online users: {e}")
+            logger.error(f"Error getting online users", exc_info=True)
             return []
 
     async def get_user_presence(
@@ -600,7 +600,7 @@ class RTCAdapter:
                     "current_document": None,
                 }
         except Exception as e:
-            logger.error(f"Error getting user presence: {e}")
+            logger.error(f"Error getting user presence", exc_info=True)
             return {
                 "user_id": user_id,
                 "status": "offline",
@@ -629,7 +629,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error setting user presence: {e}")
+            logger.error(f"Error setting user presence", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def get_user_cursors(self, document_path: str) -> List[Dict[str, Any]]:
@@ -661,11 +661,11 @@ class RTCAdapter:
                                     }
                                 )
                 except Exception as e:
-                    logger.warning(f"Error querying cursor positions: {e}")
+                    logger.warning(f"Error querying cursor positions", exc_info=True)
 
             return cursors
         except Exception as e:
-            logger.error(f"Error getting user cursors: {e}")
+            logger.error(f"Error getting user cursors", exc_info=True)
             return []
 
     async def update_cursor_position(
@@ -688,7 +688,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error updating cursor position: {e}")
+            logger.error(f"Error updating cursor position", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def get_user_activity(
@@ -720,7 +720,7 @@ class RTCAdapter:
 
             return activities[:limit]
         except Exception as e:
-            logger.error(f"Error getting user activity: {e}")
+            logger.error(f"Error getting user activity", exc_info=True)
             return []
 
     async def broadcast_user_activity(
@@ -747,7 +747,7 @@ class RTCAdapter:
             # For now, just return success
             return {"success": True, "activity": activity}
         except Exception as e:
-            logger.error(f"Error broadcasting user activity: {e}")
+            logger.error(f"Error broadcasting user activity", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def get_active_sessions(
@@ -760,7 +760,7 @@ class RTCAdapter:
                 sessions = [s for s in sessions if s.get("path") == document_path]
             return sessions
         except Exception as e:
-            logger.error(f"Error getting active sessions: {e}")
+            logger.error(f"Error getting active sessions", exc_info=True)
             return []
 
     async def join_session(self, session_id: str) -> Dict[str, Any]:
@@ -777,7 +777,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error joining session: {e}")
+            logger.error(f"Error joining session", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def leave_session(self, session_id: str) -> Dict[str, Any]:
@@ -794,7 +794,7 @@ class RTCAdapter:
                 "timestamp": IOLoop.current().time(),
             }
         except Exception as e:
-            logger.error(f"Error leaving session: {e}")
+            logger.error(f"Error leaving session", exc_info=True)
             return {"success": False, "error": str(e)}
 
     # Helper methods
