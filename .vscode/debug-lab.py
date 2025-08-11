@@ -1,6 +1,14 @@
 import logging
 import sys
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(pathname)s:%(lineno)d\n  %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stderr)],
+)
+
+
 for ln in (
     # "mcp",
     "jupyter_collaboration_mcp",
