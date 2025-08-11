@@ -2,12 +2,16 @@ __all__ = [
     "define_notebook_tools",
 ]
 
-from typing import Any, Tuple, Dict, List, Optional
+import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server import FastMCP
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
 
+from ..exceptions import MCPError
 from ..rtc_adapter import RTCAdapter
+
+logger = logging.getLogger(__name__)
 
 
 def define_notebook_tools(fastmcp: FastMCP, rtc_adapter: RTCAdapter):
@@ -58,17 +62,21 @@ Examples:
         max_content_length: int = 100000,
     ) -> Tuple[str, Dict[str, Any]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         notebook = await rtc_adapter.get_notebook(path, include_collaboration_state)
 
         if not notebook:
-            raise ErrorData(
-                code=INTERNAL_ERROR,
-                message=f"Notebook not found: {path}",
+            raise MCPError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=f"Notebook not found: {path}",
+                )
             )
 
         # Apply content length limit if specified
@@ -100,9 +108,11 @@ Examples:
     )
     async def create_notebook_session(path: str) -> Dict[str, Any]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         session = await rtc_adapter.create_notebook_session(path)
@@ -141,15 +151,19 @@ Examples:
         exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path or not updates:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and updates are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and updates are required",
+                )
             )
 
         if (start_index is None or end_index is None) and not cell_ids:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Either start_index/end_index or cell_ids must be specified",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Either start_index/end_index or cell_ids must be specified",
+                )
             )
 
         results = []
@@ -214,15 +228,19 @@ Examples:
         exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path or not cells:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and cells are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and cells are required",
+                )
             )
 
         if start_position is None and not positions:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Either start_position or positions must be specified",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Either start_position or positions must be specified",
+                )
             )
 
         results = []
@@ -283,15 +301,19 @@ Examples:
         exec: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         if (start_index is None or end_index is None) and not cell_ids:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Either start_index/end_index or cell_ids must be specified",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Either start_index/end_index or cell_ids must be specified",
+                )
             )
 
         results = []
@@ -347,15 +369,19 @@ Examples:
         timeout: int = 30,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         if (start_index is None or end_index is None) and not cell_ids:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Either start_index/end_index or cell_ids must be specified",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Either start_index/end_index or cell_ids must be specified",
+                )
             )
 
         results = []

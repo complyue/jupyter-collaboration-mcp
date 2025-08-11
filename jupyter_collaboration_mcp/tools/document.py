@@ -2,11 +2,12 @@ __all__ = [
     "define_document_tools",
 ]
 
-from typing import Any, Tuple, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server import FastMCP
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
 
+from ..exceptions import MCPError
 from ..rtc_adapter import RTCAdapter
 
 
@@ -60,17 +61,21 @@ Examples:
         max_content_length: int = 100000,
     ) -> Tuple[str, Dict[str, Any]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         document = await rtc_adapter.get_document(path, include_collaboration_state)
 
         if not document:
-            raise ErrorData(
-                code=INTERNAL_ERROR,
-                message=f"Document not found: {path}",
+            raise MCPError(
+                ErrorData(
+                    code=INTERNAL_ERROR,
+                    message=f"Document not found: {path}",
+                )
             )
 
         # Apply content length limit if specified
@@ -103,9 +108,11 @@ Examples:
     )
     async def create_document_session(path: str, file_type: Optional[str] = None) -> Dict[str, Any]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         session = await rtc_adapter.create_document_session(path, file_type)
@@ -140,9 +147,11 @@ Examples:
             Description of operation results and list of update confirmations
         """
         if not path or not operations:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and operations are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and operations are required",
+                )
             )
 
         results = []
@@ -187,9 +196,11 @@ Examples:
             Description of operation results and list of insertion confirmations
         """
         if not path or not operations:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and operations are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and operations are required",
+                )
             )
 
         results = []
@@ -199,9 +210,11 @@ Examples:
             position = op.get("position")
 
             if position is None:
-                raise ErrorData(
-                    code=INVALID_PARAMS,
-                    message="Position is required for each insert operation",
+                raise MCPError(
+                    ErrorData(
+                        code=INVALID_PARAMS,
+                        message="Position is required for each insert operation",
+                    )
                 )
 
             result = await rtc_adapter.insert_text(path, text, position)
@@ -239,9 +252,11 @@ Examples:
             Description of operation results and list of deletion confirmations
         """
         if not path or not operations:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and operations are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and operations are required",
+                )
             )
 
         results = []
@@ -251,9 +266,11 @@ Examples:
             length = op.get("length")
 
             if position is None or length is None:
-                raise ErrorData(
-                    code=INVALID_PARAMS,
-                    message="Position and length are required for each delete operation",
+                raise MCPError(
+                    ErrorData(
+                        code=INVALID_PARAMS,
+                        message="Position and length are required for each delete operation",
+                    )
                 )
 
             result = await rtc_adapter.delete_text(path, position, length)
@@ -278,9 +295,11 @@ Examples:
     )
     async def get_document_history(path: str, limit: int = 10) -> Tuple[str, List[Dict[str, Any]]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         history = await rtc_adapter.get_document_history(path, limit)
@@ -303,9 +322,11 @@ Examples:
     )
     async def restore_document_version(path: str, version_id: str) -> Tuple[str, Dict[str, Any]]:
         if not all([path, version_id]):
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and version_id are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and version_id are required",
+                )
             )
 
         result = await rtc_adapter.restore_document_version(path, version_id)
@@ -335,9 +356,11 @@ Examples:
         synchronize: bool = False,
     ) -> Tuple[str, Dict[str, Any]]:
         if not path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path is required",
+                )
             )
 
         result = await rtc_adapter.fork_document(path, title, description, synchronize)
@@ -361,9 +384,11 @@ Examples:
     )
     async def merge_document_fork(path: str, fork_id: str) -> Tuple[str, Dict[str, Any]]:
         if not all([path, fork_id]):
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Path and fork_id are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Path and fork_id are required",
+                )
             )
 
         result = await rtc_adapter.merge_document_fork(path, fork_id)

@@ -2,11 +2,12 @@ __all__ = [
     "define_awareness_tools",
 ]
 
-from typing import Any, Tuple, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server import FastMCP
 from mcp.types import INTERNAL_ERROR, INVALID_PARAMS, ErrorData
 
+from ..exceptions import MCPError
 from ..rtc_adapter import RTCAdapter
 
 
@@ -54,9 +55,11 @@ Examples:
         user_id: str, document_path: Optional[str] = None
     ) -> Tuple[str, Dict[str, Any]]:
         if not user_id:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="User ID is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="User ID is required",
+                )
             )
 
         presence = await rtc_adapter.get_user_presence(user_id, document_path)
@@ -107,9 +110,11 @@ Examples:
     )
     async def get_user_cursors(document_path: str) -> Tuple[str, List[Dict[str, Any]]]:
         if not document_path:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Document path is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Document path is required",
+                )
             )
 
         cursors = await rtc_adapter.get_user_cursors(document_path)
@@ -137,9 +142,11 @@ Examples:
         document_path: str, position: Dict[str, Any], selection: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, Dict[str, Any]]:
         if not all([document_path, position]):
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Document path and position are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Document path and position are required",
+                )
             )
 
         result = await rtc_adapter.update_cursor_position(document_path, position, selection)
@@ -197,9 +204,11 @@ Examples:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         if not all([activity_type, description]):
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Activity type and description are required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Activity type and description are required",
+                )
             )
 
         if metadata is None:
@@ -251,9 +260,11 @@ Examples:
     )
     async def join_session(session_id: str) -> Tuple[str, Dict[str, Any]]:
         if not session_id:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Session ID is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Session ID is required",
+                )
             )
 
         result = await rtc_adapter.join_session(session_id)
@@ -276,9 +287,11 @@ Examples:
     )
     async def leave_session(session_id: str) -> Tuple[str, Dict[str, Any]]:
         if not session_id:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Session ID is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Session ID is required",
+                )
             )
 
         result = await rtc_adapter.leave_session(session_id)

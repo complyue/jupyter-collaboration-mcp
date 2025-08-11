@@ -23,6 +23,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
 
+from .exceptions import MCPError
 from .tornado_event_store import TornadoEventStore
 
 logger = logging.getLogger(__name__)
@@ -164,7 +165,9 @@ class TornadoSessionManager:
         except Exception as e:
             logger.error(f"Error processing MCP message: {e}", exc_info=True)
 
-            if isinstance(e, ErrorData):
+            if isinstance(e, MCPError):
+                error_data = e.error_data
+            elif isinstance(e, ErrorData):
                 error_data = e
             else:
                 error_data = ErrorData(
@@ -264,21 +267,27 @@ class TornadoSessionManager:
         arguments = request_data.get("params", {}).get("arguments", {})
 
         if not tool_name:
-            raise ErrorData(
-                code=INVALID_PARAMS,
-                message="Tool name is required",
+            raise MCPError(
+                ErrorData(
+                    code=INVALID_PARAMS,
+                    message="Tool name is required",
+                )
             )
 
         # Use FastMCP's built-in tool calling mechanism
         try:
             result = await self.fastmcp.call_tool(tool_name, arguments)
         except Exception as e:
-            if isinstance(e, ErrorData):
+            if isinstance(e, MCPError):
+                raise e.error_data
+            elif isinstance(e, ErrorData):
                 raise e
             else:
-                raise ErrorData(
-                    code=INTERNAL_ERROR,
-                    message=f"Error calling tool {tool_name}: {str(e)}",
+                raise MCPError(
+                    ErrorData(
+                        code=INTERNAL_ERROR,
+                        message=f"Error calling tool {tool_name}: {str(e)}",
+                    )
                 )
 
         # Store event if event store is available
