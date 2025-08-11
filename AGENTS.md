@@ -224,6 +224,7 @@ To connect an AI agent to this MCP server:
   "mcpServers": {
     "jupyter-collaboration": {
       "url": "http://localhost:8888/mcp",
+      "type": "streamable-http",
       "headers": {
         "Authorization": "Identity.token your-secret-token"
       },

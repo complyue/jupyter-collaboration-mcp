@@ -26,7 +26,7 @@ graph TD
         YSTORE[YDoc Store]
     end
 
-    MCP_CLIENT -->|HTTP/SSE| MCP_SERVER
+    MCP_CLIENT -->|HTTP/StreamableHTTP| MCP_SERVER
     MCP_SERVER --> RTC_ADAPTER
     RTC_ADAPTER --> COLLABORATION
     COLLABORATION --> WEBSOCKET
@@ -35,7 +35,7 @@ graph TD
 
 ### Key Components
 
-1. **MCP Server (StreamableHTTP)**: Based on the MCP StreamableHTTP example, using HTTP with Server-Sent Events (SSE) for real-time communication with AI agents.
+1. **MCP Server (StreamableHTTP)**: Based on the MCP StreamableHTTP example, using HTTP with Streamable HTTP for bidirectional communication with AI agents.
 
 2. **RTC Adapter Layer**: A new component that translates MCP requests into operations on the existing collaboration system.
 
@@ -980,7 +980,7 @@ The project depends on core Jupyter and MCP packages:
 
 #### 1.3 Implement Core MCP Server with FastMCP
 
-The MCP server is implemented using FastMCP, which provides a high-level, declarative approach to defining MCP tools. The server is initialized with a name and description, and tools are registered using Python decorators. The server handles HTTP requests with Server-Sent Events (SSE) for real-time communication with AI agents.
+The MCP server is implemented using FastMCP, which provides a high-level, declarative approach to defining MCP tools. The server is initialized with a name and description, and tools are registered using Python decorators. The server handles HTTP requests with Streamable HTTP for bidirectional communication with AI agents.
 
 Authentication is implemented as middleware that validates tokens from Jupyter's authentication system. The server integrates with Jupyter's extension system to be loaded as a server extension.
 
@@ -1119,7 +1119,7 @@ Key features of the event store implementation:
 - Automatic cleanup of old events to manage memory usage
 - Support for event replay after disconnections
 
-The event store works with the Server-Sent Events (SSE) mechanism to provide real-time updates to AI agents while maintaining the ability to resume sessions after interruptions.
+The event store works with the Streamable HTTP mechanism to provide real-time updates to AI agents while maintaining the ability to resume sessions after interruptions.
 
 ### Phase 5: Testing and Documentation
 

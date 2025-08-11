@@ -11,7 +11,7 @@ This project enables AI agents to interact with collaborative Jupyter notebooks 
 - **Notebook Collaboration**: Real-time collaboration on Jupyter notebooks with AI agents
 - **Document Collaboration**: Shared document editing with version control and forking
 - **User Awareness**: Track user presence, cursor positions, and activity
-- **Real-time Communication**: Server-sent events for live updates
+- **Real-time Communication**: Streamable HTTP for bidirectional communication
 - **Authentication & Authorization**: Integrated with Jupyter's security infrastructure
 - **Resumable Streams**: Clients can reconnect and resume from where they left off
 
@@ -72,6 +72,7 @@ For MCP clients, you'll need to configure the server URL and authentication toke
   "mcpServers": {
     "jupyter-collaboration": {
       "url": "http://localhost:8888/mcp",
+      "type": "streamable-http",
       "headers": {
         "Authorization": "Identity.token your-secret-token"
       },
@@ -84,6 +85,7 @@ For MCP clients, you'll need to configure the server URL and authentication toke
 #### Configuration Parameters
 
 - `url`: The URL of the MCP server endpoint
+- `type`: The transport type, must be "streamable-http" for this server
 - `headers`: HTTP headers to include in requests, typically including the Authorization header with the token
 - `disabled`: Set to `true` to disable this server configuration
 - `alwaysAllow`: Optional list of tools that should always be allowed (if supported by your client)

@@ -70,7 +70,7 @@ class MCPHandler(RequestHandler):
             return
 
     async def get(self, path: str = ""):
-        """Handle GET requests for SSE streams."""
+        """Handle GET requests for streamable-http mode."""
         try:
             # Handle the request with the session manager
             await self.session_manager.handle_request(self)
@@ -80,7 +80,7 @@ class MCPHandler(RequestHandler):
             self.finish(f"Internal server error: {e}")
 
     async def post(self, path: str = ""):
-        """Handle POST requests containing MCP messages."""
+        """Handle POST requests containing MCP messages in streamable-http mode."""
         try:
             # Handle the request with the session manager
             await self.session_manager.handle_request(self)
@@ -99,7 +99,7 @@ class MCPHandler(RequestHandler):
             self.finish(f"Internal server error: {e}")
 
     async def delete(self, path: str = ""):
-        """Handle DELETE requests for session termination."""
+        """Handle DELETE requests for session termination in streamable-http mode."""
         try:
             await self.session_manager.handle_request(self)
         except Exception as e:

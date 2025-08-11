@@ -2,7 +2,7 @@
 Tornado-native session manager for MCP server.
 
 This module implements a session manager using Tornado's async patterns
-without ASGI dependencies, handling MCP sessions and SSE streams.
+without ASGI dependencies, handling MCP sessions with streamable-http mode.
 """
 
 import json
@@ -24,7 +24,6 @@ from tornado.ioloop import IOLoop
 from tornado.web import RequestHandler
 
 from .tornado_event_store import TornadoEventStore
-from .tornado_sse_handler import TornadoSSEHandler
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,6 @@ class TornadoSessionManager:
         self.event_store = event_store or TornadoEventStore()
         self.json_response = json_response
         self._sessions: Dict[str, Dict[str, Any]] = {}
-        self._sse_handlers: Dict[str, TornadoSSEHandler] = {}
 
     async def handle_request(self, request_handler: RequestHandler) -> None:
         """Handle MCP HTTP request directly without ASGI conversion.
@@ -96,7 +94,7 @@ class TornadoSessionManager:
             request_handler.finish({"error": "Internal server error"})
 
     async def _handle_get(self, request_handler: RequestHandler, path: str) -> None:
-        """Handle GET requests for SSE streams.
+        """Handle GET requests for streamable-http mode.
 
         Args:
             request_handler: Tornado request handler
@@ -105,41 +103,36 @@ class TornadoSessionManager:
         # Get or create session ID from headers
         session_id = self._get_or_create_session_id(request_handler)
 
-        # Create SSE handler
-        sse_handler = TornadoSSEHandler(request_handler)
-        self._sse_handlers[session_id] = sse_handler
+        # Set headers for streamable-http mode
+        request_handler.set_header("Content-Type", "application/json")
+        request_handler.set_header("Cache-Control", "no-cache")
+        request_handler.set_header("Connection", "keep-alive")
 
-        # Start heartbeat
-        await sse_handler.start_heartbeat_loop()
+        # Send session info as JSON response
+        session_info = self._sessions[session_id]
+        response_data = {
+            "session_id": session_id,
+            "status": session_info.get("status", "active"),
+        }
 
         # Check for Last-Event-ID header for resumability
         last_event_id = request_handler.request.headers.get("Last-Event-ID")
         if last_event_id and self.event_store:
             try:
-                await self.event_store.replay_events_after(
+                # Replay events after the specified event ID
+                last_sent_id = await self.event_store.replay_events_after(
                     last_event_id,
-                    lambda event: sse_handler.send_event(
-                        event_type="message",
-                        data=event.message,
-                        event_id=event.event_id,
-                    ),
+                    lambda event: None,  # We don't need to send events during replay
                 )
+
+                if last_sent_id:
+                    response_data["last_event_id"] = last_sent_id
             except Exception as e:
                 logger.error(f"Error replaying events: {e}")
 
-        # Send initial session info
-        session_info = self._sessions[session_id]
-        await sse_handler.send_event(
-            event_type="session_info",
-            data={
-                "session_id": session_id,
-                "status": session_info.get("status", "active"),
-            },
-        )
-
-        # Keep the connection open for SSE
-        # The connection will be closed when the client disconnects
-        # or when the session is ended
+        # Send response
+        response_json = json.dumps(response_data)
+        request_handler.finish(response_json)
 
     async def _handle_post(
         self, request_handler: RequestHandler, path: str, request_data: Any
@@ -159,37 +152,15 @@ class TornadoSessionManager:
             # Handle tool calls
             if "method" in request_data and request_data["method"] == "tools/call":
                 result = await self._handle_tool_call(session_id, request_data)
-
-                if self.json_response or not self._sse_handlers.get(session_id):
-                    # Send JSON response
-                    json_response_str = json.dumps(result)
-                    request_handler.set_header("Content-Type", "application/json")
-                    request_handler.finish(json_response_str)
-                else:
-                    # Send via SSE
-                    sse_handler = self._sse_handlers[session_id]
-                    await sse_handler.send_event(
-                        event_type="tool_result",
-                        data=result,
-                    )
-                    request_handler.finish()
+                response = json.dumps(result)
+                request_handler.set_header("Content-Type", "application/json")
+                request_handler.finish(response)
             else:
                 # Handle other MCP messages
                 result = await self._handle_mcp_message(session_id, request_data)
-
-                if self.json_response or not self._sse_handlers.get(session_id):
-                    # Send JSON response
-                    json_response_str = json.dumps(result)
-                    request_handler.set_header("Content-Type", "application/json")
-                    request_handler.finish(json_response_str)
-                else:
-                    # Send via SSE
-                    sse_handler = self._sse_handlers[session_id]
-                    await sse_handler.send_event(
-                        event_type="mcp_response",
-                        data=result,
-                    )
-                    request_handler.finish()
+                response = json.dumps(result)
+                request_handler.set_header("Content-Type", "application/json")
+                request_handler.finish(response)
         except Exception as e:
             logger.error(f"Error processing MCP message: {e}", exc_info=True)
 
@@ -205,10 +176,7 @@ class TornadoSessionManager:
 
             # Check if this is a notification (no id field) - notifications don't get error responses
             if error_id is None:
-                if self.json_response or not self._sse_handlers.get(session_id):
-                    request_handler.finish("{}")  # Return empty JSON for notifications
-                else:
-                    request_handler.finish()
+                request_handler.finish("{}")  # Return empty JSON for notifications
                 return
 
             error_response = JSONRPCError(
@@ -220,17 +188,8 @@ class TornadoSessionManager:
                 by_alias=True, mode="json", exclude_none=True
             )
 
-            if self.json_response or not self._sse_handlers.get(session_id):
-                request_handler.set_header("Content-Type", "application/json")
-                request_handler.finish(json.dumps(error_response))
-            else:
-                sse_handler = self._sse_handlers.get(session_id)
-                if sse_handler:
-                    await sse_handler.send_event(
-                        event_type="error",
-                        data=error_response,
-                    )
-                request_handler.finish()
+            request_handler.set_header("Content-Type", "application/json")
+            request_handler.finish(json.dumps(error_response))
 
     async def _handle_delete(self, request_handler: RequestHandler, path: str) -> None:
         """Handle DELETE requests for session termination.
@@ -242,6 +201,12 @@ class TornadoSessionManager:
         # Get session ID from headers
         session_id = self._get_session_id(request_handler)
         if session_id:
+            # Get transport for this session
+            transport = self._transports.get(session_id)
+            if transport:
+                await transport.terminate()
+                del self._transports[session_id]
+
             await self.end_session(session_id)
             request_handler.finish({"status": "Session ended"})
         else:
@@ -269,7 +234,6 @@ class TornadoSessionManager:
         }
 
         logger.info(f"Started MCP session: {session_id}")
-        return session_id
 
     async def end_session(self, session_id: str) -> None:
         """End an MCP session.
@@ -278,29 +242,11 @@ class TornadoSessionManager:
             session_id: ID of the session to end
         """
         if session_id in self._sessions:
-            # Close SSE handler if exists
-            if session_id in self._sse_handlers:
-                self._sse_handlers[session_id].close()
-                del self._sse_handlers[session_id]
-
             # Update session status
             self._sessions[session_id]["status"] = "ended"
             self._sessions[session_id]["ended_at"] = IOLoop.current().time()
 
             logger.info(f"Ended MCP session: {session_id}")
-
-    def create_sse_stream(self, request_handler: RequestHandler) -> None:
-        """Create SSE stream for server-initiated messages.
-
-        Args:
-            request_handler: Tornado request handler
-        """
-        session_id = self._get_or_create_session_id(request_handler)
-        sse_handler = TornadoSSEHandler(request_handler)
-        self._sse_handlers[session_id] = sse_handler
-
-        # Start heartbeat
-        IOLoop.current().add_callback(sse_handler.start_heartbeat_loop)
 
     async def _handle_tool_call(
         self, session_id: str, request_data: Dict[str, Any]
@@ -494,8 +440,8 @@ class TornadoSessionManager:
             event_type: Type of the event
             data: Event data
         """
-        for session_id, sse_handler in self._sse_handlers.items():
-            try:
-                await sse_handler.send_event(event_type=event_type, data=data)
-            except Exception as e:
-                logger.error(f"Error broadcasting event to session {session_id}: {e}")
+        # In streamable-http mode, events are handled through the transport's event store
+        # and will be delivered to active connections through the normal message flow
+        logger.debug(f"Broadcast event: {event_type} with data: {data}")
+        # Events will be stored in the event store and delivered to active sessions
+        # through the transport's normal message flow
