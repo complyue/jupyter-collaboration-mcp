@@ -441,16 +441,3 @@ class TornadoSessionManager:
     def _get_session_id(self, request_handler: RequestHandler) -> Optional[str]:
         """Get existing session ID."""
         return request_handler.request.headers.get("mcp-session-id")
-
-    async def broadcast_event(self, event_type: str, data: Dict[str, Any]) -> None:
-        """Broadcast an event to all active sessions.
-
-        Args:
-            event_type: Type of the event
-            data: Event data
-        """
-        # In streamable-http mode, events are handled through the transport's event store
-        # and will be delivered to active connections through the normal message flow
-        logger.debug(f"Broadcast event: {event_type} with data: {data}")
-        # Events will be stored in the event store and delivered to active sessions
-        # through the transport's normal message flow
