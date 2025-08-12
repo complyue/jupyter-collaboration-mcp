@@ -379,7 +379,7 @@ class TornadoSessionManager:
         # Handle MCP initialization
         if method == "initialize":
             result = {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": "2025-06-18",
                 "capabilities": {"tools": {"listChanged": True}},
                 "serverInfo": {"name": "jupyter-collaboration-mcp", "version": "0.1.0"},
             }
